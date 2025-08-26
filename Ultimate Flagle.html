@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ultimate Flagle</title>
+  <style>
+    :root{--accent:#93c5fd;--ok:#34d399;--bad:#fb7185;--warn:#fbbf24}
+    [data-theme="dark"]{--bg:#000000;--panel:#111111;--text:#e5e7eb;--muted:#9ca3af}
+    [data-theme="light"]{--bg:#f3f4f6;--panel:#ffffff;--text:#111827;--muted:#6b7280}
+
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    h1{margin:0;font-size:20px}
+
+    .seg{display:flex;gap:4px;background:rgba(255,255,255,.06);padding:4px;border-radius:10px}
+    .seg button{border:0;background:transparent;color:#c9d1ff;padding:6px 10px;border-radius:8px;font-weight:700;cursor:pointer}
+    .seg button.active{background:var(--accent);color:#111827}
+
+    .panel{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-top:10px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .pill{padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.06)}
+    .btn{border:0;border-radius:10px;padding:8px 12px;font-weight:700;background:var(--accent);color:#0b1020;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.2)}
+    .hidden{display:none!important}
+
+    canvas{max-width:100%;height:auto;border-radius:10px;background:#0a0f1f}
+
+    input[type=text], select, input[type=color]{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:var(--text);padding:10px 12px;border-radius:10px}
+
+    .range{display:flex;gap:8px;align-items:center;width:100%}
+    .range input[type=range]{flex:1;min-width:160px;appearance:none;background:transparent;height:24px}
+    .range input[type=range]::-webkit-slider-runnable-track{height:4px;background:rgba(255,255,255,.25);border-radius:999px}
+    .range input[type=range]::-webkit-slider-thumb{appearance:none;margin-top:-6px;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid #000}
+    .range input[type=range]::-moz-range-track{height:4px;background:rgba(255,255,255,.25);border-radius:999px}
+    .range input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--accent)}
+
+    .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:8px}
+    .item{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px;display:grid;gap:6px;place-items:center}
+    .item img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px}
+    .item small{opacity:.9;text-align:center}
+
+    .topright{display:flex;gap:8px;align-items:center}
+
+    .pop{position:fixed;right:16px;top:64px;z-index:60;width:clamp(280px,92vw,760px);max-height:min(78vh,640px);overflow:auto;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
+    .muted{color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Ultimate Flagle</h1>
+      <div class="seg" id="flagCats">
+        <button class="active" data-tab="UN">UN Members</button>
+        <button data-tab="Territories">Territories</button>
+        <button data-tab="ALL">ALL</button>
+        <button data-tab="Custom">Custom</button>
+      </div>
+      <div class="topright">
+        <button class="btn ghost" id="uiBtn">🎨 UI</button>
+        <button class="btn ghost" id="settingsBtn">⚙️ Settings</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <span class="pill">Correct: <b id="ok">0</b></span>
+          <span class="pill">Streak: <b id="streak">0</b></span>
+          <select id="customSelect" class="hidden"></select>
+          <button class="btn ghost hidden" id="createCustomBtn">Create Custom</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="startBtn">Start</button>
+          <button class="btn ghost" id="memoryBtn">Memory 5</button>
+          <button class="btn ghost" id="revealBtn" disabled>Reveal</button>
+          <button class="btn" id="nextBtn" disabled>Next</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="answer" type="text" placeholder="Your guess…" list="allnames" disabled>
+        <datalist id="allnames"></datalist>
+        <button class="btn" id="submitBtn" disabled>Submit</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <canvas id="flagCanvas" width="900" height="560"></canvas>
+      <div id="result" style="margin-top:8px"></div>
+    </section>
+
+    <section class="panel">
+      <details open>
+        <summary><b>Browse / Learn</b> — click to see what’s in the current pool</summary>
+        <div class="list" id="learnList"></div>
+      </details>
+    </section>
+  </div>
+
+  <!-- UI panel -->
+  <div class="panel pop hidden" id="uiPanel">
+    <div class="row" style="justify-content:space-between"><b>UI</b><button class="btn ghost" id="closeUi">Close</button></div>
+    <div class="row" style="margin-top:8px">
+      <label>Theme</label>
+      <select id="themeSelect">
+        <option value="dark">Dark (black)</option>
+        <option value="light">Light (grey/white)</option>
+      </select>
+      <label>Accent</label>
+      <input type="color" id="accentPicker" value="#93c5fd">
+    </div>
+  </div>
+
+  <!-- Custom preset builder -->
+  <div class="panel pop hidden" id="customPanel">
+    <div class="row" style="justify-content:space-between"><b>Create Custom Preset</b><button class="btn ghost" id="closeCustom">Close</button></div>
+    <div class="row" style="margin-top:8px;gap:12px">
+      <input id="customSearch" type="text" placeholder="Search countries/territories…" style="flex:1;min-width:200px">
+      <span class="pill">Selected: <b id="customCount">0</b></span>
+    </div>
+    <div class="list" id="customList" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:12px;justify-content:space-between">
+      <input id="customName" type="text" placeholder="Preset name (e.g., My Speedrun)">
+      <button class="btn" id="saveCustomBtn">Save Preset</button>
+    </div>
+    <div class="muted" style="margin-top:6px">Tip: click tiles to select/deselect. Your presets are saved to this browser.</div>
+  </div>
+
+  <!-- Settings panel (effects + timer) -->
+  <div class="panel pop hidden" id="settingsPanel">
+    <div class="row" style="justify-content:space-between"><b>Flag Effects</b><button class="btn ghost" id="closeSettings">Close</button></div>
+
+    <div class="range" style="margin-top:8px">
+      <label class="row"><input type="checkbox" id="blurToggle"> Blur</label>
+      <input id="blurRange" type="range" min="0" max="20" step="0.5" value="0"><span id="blurVal">0px</span>
+    </div>
+
+    <div class="range">
+      <label class="row"><input type="checkbox" id="pixelToggle"> Pixelate</label>
+      <input id="pixelRange" type="range" min="1" max="60" step="1" value="1"><span id="pixelVal">1</span>
+    </div>
+
+    <div class="range">
+      <label class="row"><input type="checkbox" id="zoomToggle"> Random Zoom-in</label>
+      <input id="zoomRange" type="range" min="1" max="6" step="0.1" value="2"><span id="zoomVal">2.0×</span>
+    </div>
+
+    <div class="row">
+      <label class="row"><input type="checkbox" id="sixToggle"> 6‑Piece Reveal (on wrong guesses)</label>
+    </div>
+    <div class="row">
+      <label class="row"><input type="checkbox" id="randColorToggle"> Random Colors (per flag)</label>
+    </div>
+
+    <hr style="width:100%;border:none;border-top:1px solid rgba(255,255,255,.15)">
+
+    <div class="range">
+      <label>Grayscale</label>
+      <input id="gsRange" type="range" min="0" max="1" step="0.05" value="0"><span id="gsVal">0</span>
+    </div>
+    <div class="range">
+      <label>Invert</label>
+      <input id="invRange" type="range" min="0" max="1" step="0.05" value="0"><span id="invVal">0</span>
+    </div>
+    <div class="range">
+      <label>Hue</label>
+      <input id="hueRange" type="range" min="0" max="360" step="1" value="0"><span id="hueVal">0°</span>
+    </div>
+    <div class="range">
+      <label>Saturation</label>
+      <input id="satRange" type="range" min="0" max="3" step="0.05" value="1"><span id="satVal">1.00×</span>
+    </div>
+    <div class="range">
+      <label>Contrast</label>
+      <input id="conRange" type="range" min="0" max="3" step="0.05" value="1"><span id="conVal">1.00×</span>
+    </div>
+
+    <hr style="width:100%;border:none;border-top:1px solid rgba(255,255,255,.15)">
+
+    <div class="range">
+      <label>Timer (show flag): <span id="timerVal">∞</span></label>
+      <input id="timerRange" type="range" min="0.01" max="5" step="0.01" value="5">
+      <label class="row"><input type="checkbox" id="timerInfinite" checked> ∞</label>
+    </div>
+
+    <div class="muted" id="applyNote">Changes apply to the <b>next</b> flag.</div>
+  </div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const startBtn = $('#startBtn');
+  const memoryBtn = $('#memoryBtn');
+  const revealBtn = $('#revealBtn');
+  const nextBtn = $('#nextBtn');
+  const submitBtn = $('#submitBtn');
+  const answer = $('#answer');
+  const resultEl = $('#result');
+  const canvas = $('#flagCanvas');
+  const ctx = canvas.getContext('2d');
+  const okEl = $('#ok');
+  const streakEl = $('#streak');
+  const learnList = $('#learnList');
+  const customSelect = $('#customSelect');
+  const createCustomBtn = $('#createCustomBtn');
+  const customPanel = $('#customPanel');
+  const closeCustom = $('#closeCustom');
+  const customSearch = $('#customSearch');
+  const customList = $('#customList');
+  const customCount = $('#customCount');
+  const customName = $('#customName');
+  const saveCustomBtn = $('#saveCustomBtn');
+
+  // UI panels
+  const uiBtn=$('#uiBtn'), uiPanel=$('#uiPanel'), closeUi=$('#closeUi');
+  const settingsBtn=$('#settingsBtn'), settingsPanel=$('#settingsPanel'), closeSettings=$('#closeSettings');
+  const themeSelect=$('#themeSelect');
+  const accentPicker=$('#accentPicker');
+
+  // Effect controls
+  const blurToggle=$('#blurToggle');
+  const blurRange=$('#blurRange');
+  const blurVal=$('#blurVal');
+  const pixelToggle=$('#pixelToggle');
+  const pixelRange=$('#pixelRange');
+  const pixelVal=$('#pixelVal');
+  const zoomToggle=$('#zoomToggle');
+  const zoomRange=$('#zoomRange');
+  const zoomVal=$('#zoomVal');
+  const sixToggle=$('#sixToggle');
+  const randColorToggle=$('#randColorToggle');
+  const gsRange=$('#gsRange');
+  const gsVal=$('#gsVal');
+  const invRange=$('#invRange');
+  const invVal=$('#invVal');
+  const hueRange=$('#hueRange');
+  const hueVal=$('#hueVal');
+  const satRange=$('#satRange');
+  const satVal=$('#satVal');
+  const conRange=$('#conRange');
+  const conVal=$('#conVal');
+
+  // Timer controls
+  const timerRange=$('#timerRange');
+  const timerInfinite=$('#timerInfinite');
+  const timerVal=$('#timerVal');
+
+  // ----------------- Data (UN + Territories) -----------------
+  const COMMON = {"United Kingdom of Great Britain and Northern Ireland":"United Kingdom","United States of America":"United States","Korea (Republic of)":"South Korea","Korea (Democratic People's Republic of)":"North Korea","Côte d’Ivoire":"Cote d'Ivoire","Viet Nam":"Vietnam","Syrian Arab Republic":"Syria","Iran (Islamic Republic of)":"Iran","Russian Federation":"Russia","Lao People's Democratic Republic":"Laos","Venezuela (Bolivarian Republic of)":"Venezuela","Tanzania, United Republic of":"Tanzania","Türkiye":"Turkey","Timor-Leste":"East Timor"};
+  const NICK = {"United States":["USA","US","U.S.","U.S.A","America","United States of America"],"United Kingdom":["UK","Britain","Great Britain"],"Russia":["Russian Federation"],"South Korea":["Korea, South","Republic of Korea","ROK"],"North Korea":["Korea, North","Democratic People's Republic of Korea","DPRK"],"Cote d'Ivoire":["Ivory Coast"],"Czech Republic":["Czechia"],"Myanmar":["Burma"],"Turkey":["Türkiye"],"East Timor":["Timor-Leste"],"Laos":["Lao PDR","Lao People's Democratic Republic"],"Syria":["Syrian Arab Republic"],"Vietnam":["Viet Nam"],"Taiwan":["Republic of China","ROC"],"Palestine":["State of Palestine","Palestine, State of"],"Moldova":["Republic of Moldova"],"Micronesia":["Micronesia (Federated States of)","FSM"],"North Macedonia":["Macedonia"],"DR Congo":["Democratic Republic of the Congo","Congo (DRC)","Congo-Kinshasa","Congo, Democratic Republic of the"],"Republic of the Congo":["Congo-Brazzaville","Congo"]};
+
+  const UN_CSV = `AF|Afghanistan|Asia|Southern Asia|38928346\nAL|Albania|Europe|Southern Europe|2877797\nDZ|Algeria|Africa|Northern Africa|43851044\nAD|Andorra|Europe|Southern Europe|77265\nAO|Angola|Africa|Middle Africa|32866272\nAG|Antigua and Barbuda|Americas|Caribbean|97929\nAR|Argentina|Americas|South America|45195774\nAM|Armenia|Asia|Western Asia|2963243\nAU|Australia|Oceania|Australia and New Zealand|25499884\nAT|Austria|Europe|Western Europe|9006398\nAZ|Azerbaijan|Asia|Western Asia|10139177\nBS|Bahamas|Americas|Caribbean|393244\nBH|Bahrain|Asia|Western Asia|1701575\nBD|Bangladesh|Asia|Southern Asia|164689383\nBB|Barbados|Americas|Caribbean|287375\nBY|Belarus|Europe|Eastern Europe|9449323\nBE|Belgium|Europe|Western Europe|11589623\nBZ|Belize|Americas|Central America|397621\nBJ|Benin|Africa|Western Africa|12123200\nBT|Bhutan|Asia|Southern Asia|771608\nBO|Bolivia|Americas|South America|11673029\nBA|Bosnia and Herzegovina|Europe|Southern Europe|3280819\nBW|Botswana|Africa|Southern Africa|2351627\nBR|Brazil|Americas|South America|212559417\nBN|Brunei Darussalam|Asia|South-Eastern Asia|437483\nBG|Bulgaria|Europe|Eastern Europe|6948445\nBF|Burkina Faso|Africa|Western Africa|20903273\nBI|Burundi|Africa|Eastern Africa|11890784\nCV|Cabo Verde|Africa|Western Africa|555987\nKH|Cambodia|Asia|South-Eastern Asia|16718965\nCM|Cameroon|Africa|Middle Africa|26545863\nCA|Canada|Americas|North America|37742154\nCF|Central African Republic|Africa|Middle Africa|4829767\nTD|Chad|Africa|Middle Africa|16425864\nCL|Chile|Americas|South America|19116201\nCN|China|Asia|Eastern Asia|1439323776\nCO|Colombia|Americas|South America|50882891\nKM|Comoros|Africa|Eastern Africa|869601\nCD|Congo (Democratic Republic of the)|Africa|Middle Africa|89561403\nCG|Congo|Africa|Middle Africa|5518087\nCR|Costa Rica|Americas|Central America|5094118\nCI|Côte d’Ivoire|Africa|Western Africa|26378274\nHR|Croatia|Europe|Southern Europe|4105267\nCU|Cuba|Americas|Caribbean|11326616\nCY|Cyprus|Asia|Western Asia|1207359\nCZ|Czechia|Europe|Eastern Europe|10708981\nDK|Denmark|Europe|Northern Europe|5792202\nDJ|Djibouti|Africa|Eastern Africa|988000\nDM|Dominica|Americas|Caribbean|71986\nDO|Dominican Republic|Americas|Caribbean|10847910\nEC|Ecuador|Americas|South America|17643054\nEG|Egypt|Africa|Northern Africa|102334404\nSV|El Salvador|Americas|Central America|6486201\nGQ|Equatorial Guinea|Africa|Middle Africa|1402985\nER|Eritrea|Africa|Eastern Africa|3546421\nEE|Estonia|Europe|Northern Europe|1326535\nSZ|Eswatini|Africa|Southern Africa|1160164\nET|Ethiopia|Africa|Eastern Africa|114963588\nFJ|Fiji|Oceania|Melanesia|896445\nFI|Finland|Europe|Northern Europe|5540720\nFR|France|Europe|Western Europe|65273511\nGA|Gabon|Africa|Middle Africa|2225734\nGM|Gambia|Africa|Western Africa|2416668\nGE|Georgia|Asia|Western Asia|3989167\nDE|Germany|Europe|Western Europe|83783942\nGH|Ghana|Africa|Western Africa|31072940\nGR|Greece|Europe|Southern Europe|10423054\nGD|Grenada|Americas|Caribbean|112523\nGT|Guatemala|Americas|Central America|17915568\nGN|Guinea|Africa|Western Africa|13132792\nGW|Guinea-Bissau|Africa|Western Africa|1968001\nGY|Guyana|Americas|South America|786552\nHT|Haiti|Americas|Caribbean|11402528\nHN|Honduras|Americas|Central America|9904608\nHU|Hungary|Europe|Eastern Europe|9660351\nIS|Iceland|Europe|Northern Europe|341243\nIN|India|Asia|Southern Asia|1380004385\nID|Indonesia|Asia|South-Eastern Asia|273523615\nIR|Iran (Islamic Republic of)|Asia|Southern Asia|83992949\nIQ|Iraq|Asia|Western Asia|40222493\nIE|Ireland|Europe|Northern Europe|4937786\nIL|Israel|Asia|Western Asia|8655535\nIT|Italy|Europe|Southern Europe|60461826\nJM|Jamaica|Americas|Caribbean|2961167\nJP|Japan|Asia|Eastern Asia|126476461\nJO|Jordan|Asia|Western Asia|10203140\nKZ|Kazakhstan|Asia|Central Asia|18776707\nKE|Kenya|Africa|Eastern Africa|53771296\nKI|Kiribati|Oceania|Micronesia|119449\nKP|Korea (Democratic People's Republic of)|Asia|Eastern Asia|25778816\nKR|Korea (Republic of)|Asia|Eastern Asia|51269185\nKW|Kuwait|Asia|Western Asia|4270571\nKG|Kyrgyzstan|Asia|Central Asia|6524195\nLA|Lao People's Democratic Republic|Asia|South-Eastern Asia|7275560\nLV|Latvia|Europe|Northern Europe|1886198\nLB|Lebanon|Asia|Western Asia|6825445\nLS|Lesotho|Africa|Southern Africa|2142249\nLR|Liberia|Africa|Western Africa|5057681\nLY|Libya|Africa|Northern Africa|6871292\nLI|Liechtenstein|Europe|Western Europe|38128\nLT|Lithuania|Europe|Northern Europe|2722289\nLU|Luxembourg|Europe|Western Europe|625978\nMG|Madagascar|Africa|Eastern Africa|27691018\nMW|Malawi|Africa|Eastern Africa|19129952\nMY|Malaysia|Asia|South-Eastern Asia|32365999\nMV|Maldives|Asia|Southern Asia|540544\nML|Mali|Africa|Western Africa|20250833\nMT|Malta|Europe|Southern Europe|441543\nMH|Marshall Islands|Oceania|Micronesia|59190\nMR|Mauritania|Africa|Western Africa|4649658\nMU|Mauritius|Africa|Eastern Africa|1271768\nMX|Mexico|Americas|North America|128932753\nFM|Micronesia (Federated States of)|Oceania|Micronesia|115023\nMD|Moldova|Europe|Eastern Europe|4033963\nMC|Monaco|Europe|Western Europe|39242\nMN|Mongolia|Asia|Eastern Asia|3278290\nME|Montenegro|Europe|Southern Europe|628066\nMA|Morocco|Africa|Northern Africa|36910560\nMZ|Mozambique|Africa|Eastern Africa|31255435\nMM|Myanmar|Asia|South-Eastern Asia|54409800\nNA|Namibia|Africa|Southern Africa|2540905\nNR|Nauru|Oceania|Micronesia|10824\nNP|Nepal|Asia|Southern Asia|29136808\nNL|Netherlands|Europe|Western Europe|17134872\nNZ|New Zealand|Oceania|Australia and New Zealand|4822233\nNI|Nicaragua|Americas|Central America|6624554\nNE|Niger|Africa|Western Africa|24206644\nNG|Nigeria|Africa|Western Africa|206139589\nMK|North Macedonia|Europe|Southern Europe|2083374\nNO|Norway|Europe|Northern Europe|5421241\nOM|Oman|Asia|Western Asia|5106626\nPK|Pakistan|Asia|Southern Asia|220892340\nPW|Palau|Oceania|Micronesia|18094\nPA|Panama|Americas|Central America|4314767\nPG|Papua New Guinea|Oceania|Melanesia|8947027\nPY|Paraguay|Americas|South America|7132538\nPE|Peru|Americas|South America|32971854\nPH|Philippines|Asia|South-Eastern Asia|109581078\nPL|Poland|Europe|Eastern Europe|37846611\nPT|Portugal|Europe|Southern Europe|10196709\nQA|Qatar|Asia|Western Asia|2881053\nRO|Romania|Europe|Eastern Europe|19237691\nRU|Russian Federation|Europe|Eastern Europe|145934462\nRW|Rwanda|Africa|Eastern Africa|12952218\nKN|Saint Kitts and Nevis|Americas|Caribbean|53199\nLC|Saint Lucia|Americas|Caribbean|183627\nVC|Saint Vincent and the Grenadines|Americas|Caribbean|110940\nWS|Samoa|Oceania|Polynesia|198414\nSM|San Marino|Europe|Southern Europe|33931\nST|Sao Tome and Principe|Africa|Middle Africa|219159\nSA|Saudi Arabia|Asia|Western Asia|34813871\nSN|Senegal|Africa|Western Africa|16743927\nRS|Serbia|Europe|Southern Europe|8737370\nSC|Seychelles|Africa|Eastern Africa|98347\nSL|Sierra Leone|Africa|Western Africa|7976983\nSG|Singapore|Asia|South-Eastern Asia|5850342\nSK|Slovakia|Europe|Eastern Europe|5459642\nSI|Slovenia|Europe|Southern Europe|2078938\nSB|Solomon Islands|Oceania|Melanesia|686884\nSO|Somalia|Africa|Eastern Africa|15893222\nZA|South Africa|Africa|Southern Africa|59308690\nSS|South Sudan|Africa|Eastern Africa|11193725\nES|Spain|Europe|Southern Europe|46754778\nLK|Sri Lanka|Asia|Southern Asia|21413249\nSD|Sudan|Africa|Northern Africa|43849260\nSR|Suriname|Americas|South America|586632\nSE|Sweden|Europe|Northern Europe|10099265\nCH|Switzerland|Europe|Western Europe|8654622\nSY|Syrian Arab Republic|Asia|Western Asia|17500658\nTJ|Tajikistan|Asia|Central Asia|9537645\nTZ|Tanzania, United Republic of|Africa|Eastern Africa|59734218\nTH|Thailand|Asia|South-Eastern Asia|69799978\nTL|Timor-Leste|Asia|South-Eastern Asia|1318445\nTG|Togo|Africa|Western Africa|8278724\nTO|Tonga|Oceania|Polynesia|105695\nTT|Trinidad and Tobago|Americas|Caribbean|1399488\nTN|Tunisia|Africa|Northern Africa|11818619\nTR|Türkiye|Asia|Western Asia|84339067\nTM|Turkmenistan|Asia|Central Asia|6031200\nTV|Tuvalu|Oceania|Polynesia|11792\nUG|Uganda|Africa|Eastern Africa|45741007\nUA|Ukraine|Europe|Eastern Europe|44134693\nAE|United Arab Emirates|Asia|Western Asia|9890402\nGB|United Kingdom of Great Britain and Northern Ireland|Europe|Northern Europe|67886011\nUS|United States of America|Americas|North America|331002651\nUY|Uruguay|Americas|South America|3473730\nUZ|Uzbekistan|Asia|Central Asia|33469203\nVU|Vanuatu|Oceania|Melanesia|307145\nVE|Venezuela (Bolivarian Republic of)|Americas|South America|28435940\nVN|Viet Nam|Asia|South-Eastern Asia|97338579\nYE|Yemen|Asia|Western Asia|29825964\nZM|Zambia|Africa|Eastern Africa|18383955\nZW|Zimbabwe|Africa|Eastern Africa|14862924`;
+
+  const TERR_LIST = [['AI','Anguilla','Americas','Caribbean'],['AW','Aruba','Americas','Caribbean'],['BM','Bermuda','Americas','North America'],['BQ','Caribbean Netherlands','Americas','Caribbean'],['CW','Curaçao','Americas','Caribbean'],['FK','Falkland Islands (Malvinas)','Americas','South America'],['GF','French Guiana','Americas','South America'],['GL','Greenland','Americas','North America'],['GP','Guadeloupe','Americas','Caribbean'],['KY','Cayman Islands','Americas','Caribbean'],['MF','Saint Martin (French part)','Americas','Caribbean'],['MQ','Martinique','Americas','Caribbean'],['MS','Montserrat','Americas','Caribbean'],['PM','Saint Pierre and Miquelon','Americas','North America'],['PR','Puerto Rico','Americas','Caribbean'],['SX','Sint Maarten (Dutch part)','Americas','Caribbean'],['TC','Turks and Caicos Islands','Americas','Caribbean'],['VG','British Virgin Islands','Americas','Caribbean'],['VI','United States Virgin Islands','Americas','Caribbean'],['AX','Åland Islands','Europe','Northern Europe'],['FO','Faroe Islands','Europe','Northern Europe'],['GG','Guernsey','Europe','Northern Europe'],['GI','Gibraltar','Europe','Southern Europe'],['IM','Isle of Man','Europe','Northern Europe'],['JE','Jersey','Europe','Northern Europe'],['SJ','Svalbard and Jan Mayen','Europe','Northern Europe'],['VA','Holy See','Europe','Southern Europe'],['EH','Western Sahara','Africa','Northern Africa'],['IO','British Indian Ocean Territory','Africa','Eastern Africa'],['RE','Réunion','Africa','Eastern Africa'],['SH','Saint Helena, Ascension and Tristan da Cunha','Africa','Western Africa'],['YT','Mayotte','Africa','Eastern Africa'],['CC','Cocos (Keeling) Islands','Asia','South-Eastern Asia'],['CX','Christmas Island','Asia','South-Eastern Asia'],['HK','Hong Kong','Asia','Eastern Asia'],['MO','Macao','Asia','Eastern Asia'],['PS','Palestine, State of','Asia','Western Asia'],['TW','Taiwan','Asia','Eastern Asia'],['AS','American Samoa','Oceania','Polynesia'],['CK','Cook Islands','Oceania','Polynesia'],['GU','Guam','Oceania','Micronesia'],['HM','Heard Island and McDonald Islands','Oceania','Subantarctic'],['NC','New Caledonia','Oceania','Melanesia'],['NF','Norfolk Island','Oceania','Australia and New Zealand'],['NU','Niue','Oceania','Polynesia'],['PN','Pitcairn','Oceania','Polynesia'],['TK','Tokelau','Oceania','Polynesia'],['UM','United States Minor Outlying Islands','Oceania','Micronesia'],['WF','Wallis and Futuna','Oceania','Polynesia'],['AQ','Antarctica','Antarctica','Antarctica'],['BV','Bouvet Island','Antarctica','Subantarctic'],['GS','South Georgia and the South Sandwich Islands','Antarctica','Subantarctic'],['TF','French Southern Territories','Antarctica','Subantarctic']];
+
+  function norm(s){return (s||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}+/gu,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();}
+  function acroVariants(name){const words=name.split(/\s+/).filter(w=>/^[a-z]/i.test(w));const acro=words.map(w=>w[0]).join('').toUpperCase();if(acro.length<2) return [];return [acro, acro.split('').join('. ')+'.', acro.split('').join('.')];}
+  function addNicknames(obj){const common=COMMON[obj.name];if(common) obj.name=common; obj.alt=obj.alt||[]; const mapped=NICK[obj.name]; if(mapped) obj.alt.push(...mapped); acroVariants(obj.name).forEach(v=>obj.alt.push(v)); if(obj.name==='Netherlands') obj.alt.push('The Netherlands','Holland'); if(obj.name==='United Arab Emirates') obj.alt.push('UAE'); if(obj.name==='United Kingdom') obj.alt.push('UK','Britain','Great Britain'); obj.alt=[...new Set(obj.alt.filter(Boolean))]; return obj;}
+  function parseUN(csv){
+    return csv.trim().split(/\n+/).map(line=>{
+      const [cca2,rawName,continent,subregion,pop] = line.split('|');
+      const entry = {cca2,name:COMMON[rawName]||rawName,continent,subregion,pop:Number(pop)||0,flag:`https://flagcdn.com/w320/${cca2.toLowerCase()}.png`,alt:[]};
+      return addNicknames(entry);
+    });
+  }
+  function buildTerritories(){return TERR_LIST.map(([cca2,name,continent,subregion])=>addNicknames({cca2,name:COMMON[name]||name,continent,subregion,flag:`https://flagcdn.com/w320/${cca2.toLowerCase()}.png`,alt:[]}));}
+
+  const dataUN = parseUN(UN_CSV);
+  const dataTerr = buildTerritories();
+  const seen = new Set();
+  const dataAll = [...dataUN, ...dataTerr].filter(x=>{if(seen.has(x.cca2)) return false; seen.add(x.cca2); return true;}).sort((a,b)=>a.name.localeCompare(b.name));
+
+  const state = { activeTab:'UN', quizPool:[], current:null, ok:0, streak:0, timerMs:Infinity, hideTimeout:null, mode:'standard', memory:{sequence:[], index:0}, lastImage:null, piecesRevealed:1,
+    effectsCurrent:{ blurOn:false, blurPx:0, pixelOn:false, pixel:1, zoomOn:false, zoom:2, six:false, randColor:false, gs:0, inv:0, hue:0, sat:1, con:1 },
+    effectsPending:{ blurOn:false, blurPx:0, pixelOn:false, pixel:1, zoomOn:false, zoom:2, six:false, randColor:false, gs:0, inv:0, hue:0, sat:1, con:1 },
+    userPresets: []
+  };
+  state.customMode='UN_EASY';
+
+  // ---- User presets (localStorage) ----
+  const PRESET_KEY = 'uf_user_presets_v1';
+  function loadPresets(){
+    try{ const raw=localStorage.getItem(PRESET_KEY); state.userPresets = raw? JSON.parse(raw): []; }
+    catch{ state.userPresets = []; }
+  }
+  function savePresets(){ try{ localStorage.setItem(PRESET_KEY, JSON.stringify(state.userPresets)); }catch{} }
+  loadPresets();
+
+  function getCustomPool(){
+    if(String(state.customMode||'').startsWith('USER:')){
+      const p = state.userPresets.find(x=>x.id===state.customMode);
+      if(p){ const chosen=new Set(p.items||[]); return dataAll.filter(x=>chosen.has(x.cca2)); }
+    }
+    switch(state.customMode){
+      case 'UN_EASY':{ const sorted=[...dataUN].sort((a,b)=>b.pop-a.pop); const cut=Math.ceil(sorted.length*0.20); return sorted.slice(0,cut); }
+      case 'UN_MED':{ const sorted=[...dataUN].sort((a,b)=>b.pop-a.pop); const s=Math.ceil(sorted.length*0.20); const e=Math.ceil(sorted.length*0.60); return sorted.slice(s,e); }
+      case 'UN_HARD':{ const sorted=[...dataUN].sort((a,b)=>b.pop-a.pop); const e=Math.ceil(sorted.length*0.60); return sorted.slice(e); }
+      case 'NA': return dataAll.filter(x=>x.continent==='Americas' && (x.subregion.includes('North')||x.subregion.includes('Central')));
+      case 'SA': return dataAll.filter(x=>x.subregion==='South America');
+      case 'EU': return dataAll.filter(x=>x.continent==='Europe');
+      case 'AS': return dataAll.filter(x=>x.continent==='Asia');
+      case 'AF': return dataAll.filter(x=>x.continent==='Africa');
+      case 'OC': return dataAll.filter(x=>x.continent==='Oceania');
+      case 'WORLD': return dataAll;
+      default: return dataAll;
+    }
+  }
+  function getSource(){ if(state.activeTab==='UN') return dataUN; if(state.activeTab==='Territories') return dataTerr; if(state.activeTab==='ALL') return dataAll; if(state.activeTab==='Custom') return getCustomPool(); return dataAll; }
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+  function buildFilterString(){
+    const e = state.effectsCurrent;
+    const parts = [];
+    if(e.gs>0) parts.push(`grayscale(${e.gs})`);
+    if(e.inv>0) parts.push(`invert(${e.inv})`);
+    const randHue = (state.current && e.randColor && typeof state.current._randHue==='number') ? state.current._randHue : 0;
+    const hueTotal = ((e.hue||0) + randHue) % 360;
+    if(hueTotal!==0) parts.push(`hue-rotate(${hueTotal}deg)`);
+    if(e.sat!==1) parts.push(`saturate(${e.sat})`);
+    if(e.con!==1) parts.push(`contrast(${e.con})`);
+    if(e.blurOn && e.blurPx>0) parts.push(`blur(${e.blurPx}px)`);
+    return parts.join(' ');
+  }
+
+  function drawPieces(img, sx, sy, sw, sh, dx, dy, dw, dh){
+    const cols=3, rows=2; // 6 pieces
+    const pieceW = Math.floor(dw/cols), pieceH = Math.floor(dh/rows);
+    const srcPW = sw/cols, srcPH = sh/rows;
+    let n=0;
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        n++;
+        const sxi = sx + c*srcPW;
+        const syi = sy + r*srcPH;
+        const dxi = dx + c*pieceW;
+        const dyi = dy + r*pieceH;
+        if(n<=state.piecesRevealed){
+          ctx.drawImage(img, sxi, syi, srcPW, srcPH, dxi, dyi, pieceW, pieceH);
+        } else {
+          ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--panel')||'#111';
+          ctx.fillRect(dxi, dyi, pieceW, pieceH);
+        }
+      }
+    }
+  }
+
+  function renderCurrent(){
+    if(!state.lastImage) return;
+    const img = state.lastImage;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const s=Math.min(canvas.width/img.width, canvas.height/img.height);
+    const w=Math.floor(img.width*s), h=Math.floor(img.height*s);
+    const x=Math.floor((canvas.width-w)/2), y=Math.floor((canvas.height-h)/2);
+
+    let sx=0, sy=0, sw=img.width, sh=img.height;
+    const e=state.effectsCurrent;
+    if(e.zoomOn && e.zoom>1 && state.current && state.current._crop){ ({sx,sy,sw,sh}=state.current._crop); }
+
+    let off=null; let octx=null;
+    const pxOn = e.pixelOn && e.pixel>1;
+    if(pxOn){
+      const scale = Math.max(1, e.pixel);
+      const sw2 = Math.max(1, Math.floor(w/scale));
+      const sh2 = Math.max(1, Math.floor(h/scale));
+      off=document.createElement('canvas'); off.width=sw2; off.height=sh2; octx=off.getContext('2d');
+      octx.imageSmoothingEnabled=true;
+      octx.drawImage(img, sx, sy, sw, sh, 0,0, sw2, sh2);
+      ctx.imageSmoothingEnabled=false;
+    } else {
+      ctx.imageSmoothingEnabled=true;
+    }
+
+    if(e.six){
+      if(pxOn){ drawPieces(off, 0,0, off.width, off.height, x, y, w, h); }
+      else { drawPieces(img, sx, sy, sw, sh, x, y, w, h); }
+    } else {
+      if(pxOn){ ctx.drawImage(off, x, y, w, h); }
+      else { ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h); }
+    }
+
+    canvas.style.filter = buildFilterString();
+  }
+
+  function pickCrop(img, zoom){
+    const cropW = Math.floor(img.width / zoom);
+    const cropH = Math.floor(img.height / zoom);
+    const sx = Math.floor(Math.random()*(img.width - cropW));
+    const sy = Math.floor(Math.random()*(img.height - cropH));
+    return {sx,sy,sw:cropW,sh:cropH};
+  }
+
+  function drawFlag(entry){
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{
+      state.lastImage = img;
+      state.piecesRevealed = state.effectsCurrent.six ? 1 : 6;
+      if(state.effectsCurrent.zoomOn && state.effectsCurrent.zoom>1){ entry._crop = pickCrop(img, state.effectsCurrent.zoom); }
+      else { entry._crop = {sx:0,sy:0,sw:img.width,sh:img.height}; }
+      entry._randHue = state.effectsCurrent.randColor ? Math.floor(Math.random()*360) : 0;
+      renderCurrent();
+    };
+    img.onerror=()=>{ resultEl.innerHTML='<span class="bad">Failed to load image.</span>'; };
+    img.src=entry.flag;
+  }
+
+  function updateDatalist(){ const list=getSource(); const opts=[]; list.forEach(e=>{opts.push(`<option value="${e.name}">`); (e.alt||[]).forEach(a=>opts.push(`<option value="${a}">`));}); $('#allnames').innerHTML=opts.join(''); }
+  function buildLearn(){ const src=getSource(); learnList.innerHTML = src.map(x=>`<div class="item"><img loading="lazy" src="${x.flag}" alt="${x.name}"><small>${x.name}</small></div>`).join(''); }
+
+  function startGame(){ state.mode='standard'; state.ok=0; state.streak=0; okEl.textContent=0; streakEl.textContent=0; resultEl.textContent=''; state.quizPool=shuffle(getSource().slice()); answer.disabled=false; submitBtn.disabled=false; revealBtn.disabled=false; nextBtn.disabled=false; state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending)); nextFlag(); }
+
+  function nextFlag(){ if(state.quizPool.length===0){ resultEl.innerHTML='<span class="warn">No flags left.</span>'; return; } state.current=state.quizPool.pop(); state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending)); drawFlag(state.current); scheduleTimer(); }
+
+  function scheduleTimer(){ if(state.hideTimeout){clearTimeout(state.hideTimeout); state.hideTimeout=null;} if(state.timerMs!==Infinity){ state.hideTimeout=setTimeout(()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resultEl.innerHTML='<span class="warn">⏱️ Time\'s up!</span>'; }, state.timerMs); } }
+  function allNames(e){ return [e.name, ...(e.alt||[])]; }
+
+  function matches(input, entry){
+    const g = norm(input);
+    const currentNames = allNames(entry).map(norm);
+    if (currentNames.includes(g)) return true;
+    if (g.length >= 3 && currentNames.some(n => n.startsWith(g))) {
+      const src = getSource();
+      for (const e of src) {
+        if (e === entry) continue;
+        const names = allNames(e).map(norm);
+        if (names.some(n => n.startsWith(g))) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function submit(){
+    if(state.mode==='standard'){
+      if(!state.current) return;
+      const val=answer.value.trim(); if(!val) return; answer.value='';
+      if(matches(val,state.current)){
+        state.ok++; state.streak++; okEl.textContent=state.ok; streakEl.textContent=state.streak;
+        resultEl.innerHTML=`<span class="ok">Correct!</span> ${state.current.name}`;
+        nextFlag();
+      } else {
+        state.streak=0; streakEl.textContent=0;
+        resultEl.innerHTML=`<span class="bad">Nope.</span> (${state.current.name})`;
+        if(state.effectsCurrent.six && state.piecesRevealed<6){ state.piecesRevealed++; renderCurrent(); }
+      }
+      answer.focus();
+    } else if(state.mode==='memory'){
+      const seq=state.memory.sequence; const idx=state.memory.index; if(idx>=seq.length) return;
+      const val=answer.value.trim(); if(!val) return; answer.value='';
+      if(matches(val,seq[idx])){
+        state.memory.index++;
+        if(state.memory.index===seq.length){ resultEl.innerHTML='<span class="ok">You nailed all 5!</span>'; }
+        else { resultEl.innerHTML=`<span class="ok">Correct</span> — ${idx+1}/5`; }
+      } else {
+        resultEl.innerHTML = `<span class="bad">Wrong at #${idx+1}.</span> Correct order: ${seq.map(e=>e.name).join(' • ')}`;
+        state.mode='standard';
+      }
+      answer.focus();
+    }
+  }
+
+  async function startMemory(){
+    state.mode='memory'; resultEl.textContent='';
+    const src=shuffle(getSource().slice()); state.memory.sequence=src.slice(0,5); state.memory.index=0;
+    answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true; nextBtn.disabled=true;
+    const delay=ms=>new Promise(r=>setTimeout(r,ms));
+    for(const e of state.memory.sequence){
+      state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending));
+      drawFlag(e);
+      await delay(state.timerMs===Infinity?700:Math.max(10,state.timerMs));
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      await delay(250);
+    }
+    resultEl.innerHTML='Type the 5 flags <b>in order</b> and press Enter after each.';
+    answer.disabled=false; submitBtn.disabled=false; answer.value=''; answer.focus();
+    revealBtn.disabled=false; nextBtn.disabled=false;
+  }
+
+  function updateTimer(){ if(timerInfinite.checked){ state.timerMs=Infinity; timerVal.textContent='∞'; } else { const v=parseFloat(timerRange.value||'5'); state.timerMs=Math.round(Math.max(0.01,Math.min(5,v))*1000); timerVal.textContent=(state.timerMs/1000).toFixed(2)+'s'; } }
+
+  function syncPendingFromUI(){
+    const p = state.effectsPending;
+    p.blurOn = blurToggle.checked; p.blurPx = +blurRange.value; blurVal.textContent = p.blurPx+"px";
+    p.pixelOn = pixelToggle.checked; p.pixel = +pixelRange.value; pixelVal.textContent = String(p.pixel);
+    p.zoomOn = zoomToggle.checked; p.zoom = +zoomRange.value; zoomVal.textContent = p.zoom.toFixed(1)+"×";
+    p.six = sixToggle.checked;
+    p.randColor = randColorToggle.checked;
+    p.gs = +gsRange.value; gsVal.textContent = p.gs.toFixed(2);
+    p.inv = +invRange.value; invVal.textContent = p.inv.toFixed(2);
+    p.hue = +hueRange.value; hueVal.textContent = p.hue+"°";
+    p.sat = +satRange.value; satVal.textContent = p.sat.toFixed(2)+"×";
+    p.con = +conRange.value; conVal.textContent = p.con.toFixed(2)+"×";
+  }
+
+  function onEffectUIChange(){ syncPendingFromUI(); document.getElementById('applyNote').classList.remove('hidden'); }
+
+  settingsBtn.addEventListener('click',()=>settingsPanel.classList.toggle('hidden'));
+  closeSettings.addEventListener('click',()=>settingsPanel.classList.add('hidden'));
+  ['change','input'].forEach(ev=>{
+    [blurToggle,blurRange,pixelToggle,pixelRange,zoomToggle,zoomRange,sixToggle,randColorToggle,gsRange,invRange,hueRange,satRange,conRange].forEach(el=>el.addEventListener(ev,onEffectUIChange));
+  });
+
+  timerInfinite.addEventListener('change', updateTimer);
+  timerRange.addEventListener('input', ()=>{timerInfinite.checked=false; updateTimer();});
+  updateTimer();
+  syncPendingFromUI();
+
+  uiBtn.addEventListener('click',()=>uiPanel.classList.toggle('hidden'));
+  closeUi.addEventListener('click',()=>uiPanel.classList.add('hidden'));
+  themeSelect.addEventListener('change',()=>{ document.documentElement.setAttribute('data-theme', themeSelect.value); });
+  accentPicker.addEventListener('input',()=>{ document.documentElement.style.setProperty('--accent', accentPicker.value); });
+
+  document.getElementById('flagCats').addEventListener('click',(e)=>{
+    const b=e.target.closest('button[data-tab]');
+    if(!b) return;
+    const tab=b.dataset.tab;
+    [...document.querySelectorAll('#flagCats button')].forEach(x=>x.classList.toggle('active', x===b));
+    state.activeTab=tab;
+    if(tab==='Custom'){ customSelect.classList.remove('hidden'); createCustomBtn.classList.remove('hidden'); buildCustomOptions(); }
+    else { customSelect.classList.add('hidden'); createCustomBtn.classList.add('hidden'); }
+    updateDatalist(); buildLearn(); resultEl.textContent='';
+  });
+
+  startBtn.addEventListener('click', startGame);
+  nextBtn.addEventListener('click', nextFlag);
+  revealBtn.addEventListener('click', ()=>{ if(state.current){ state.piecesRevealed = 6; renderCurrent(); resultEl.innerHTML=`<span class="warn">Answer:</span> ${state.current.name}`; }});
+  submitBtn.addEventListener('click', submit);
+  answer.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  memoryBtn.addEventListener('click', startMemory);
+
+  function buildCustomOptions(){
+    const base=[
+      ['UN_EASY','UN - Easy (Top 20% by population)'],
+      ['UN_MED','UN - Medium (Next 40%)'],
+      ['UN_HARD','UN - Hard (Bottom 40%)'],
+      ['NA','North/Central America'],
+      ['SA','South America'],
+      ['EU','Europe'],
+      ['AS','Asia'],
+      ['AF','Africa'],
+      ['OC','Oceania'],
+      ['WORLD','World (All)']
+    ];
+    const user = state.userPresets.map(p=>[p.id, `⭐ ${p.label} (${p.items.length})`]);
+    const opts = [...base, ...user];
+    customSelect.innerHTML = opts.map(([v,l])=>`<option value="${v}" ${v===state.customMode?'selected':''}>${l}</option>`).join('');
+  }
+  customSelect.addEventListener('change',()=>{ state.customMode=customSelect.value; updateDatalist(); buildLearn(); });
+
+  // ---- Custom builder ----
+  function renderCustomList(filter=''){
+    const q = norm(filter);
+    const pool = dataAll.filter(e=>{
+      if(!q) return true;
+      const names=[e.name, ...(e.alt||[])].map(norm);
+      return names.some(n=>n.includes(q));
+    });
+    customList.innerHTML = pool.map(e=>{
+      const sel = state._customSel && state._customSel.has(e.cca2);
+      return `<div class="item" data-cca2="${e.cca2}" style="cursor:pointer;outline:${sel?'2px solid var(--accent)':'none'}"><img src="${e.flag}" alt="${e.name}"><small>${e.name}</small></div>`;
+    }).join('');
+  }
+  function openCustomBuilder(){
+    state._customSel = new Set();
+    customName.value='';
+    customSearch.value='';
+    customCount.textContent='0';
+    renderCustomList('');
+    customPanel.classList.remove('hidden');
+  }
+  function closeCustomBuilder(){ customPanel.classList.add('hidden'); }
+
+  createCustomBtn.addEventListener('click', openCustomBuilder);
+  closeCustom.addEventListener('click', closeCustomBuilder);
+  customSearch.addEventListener('input', ()=>renderCustomList(customSearch.value));
+  customList.addEventListener('click', (e)=>{
+    const card = e.target.closest('.item'); if(!card) return;
+    const id = card.getAttribute('data-cca2');
+    if(state._customSel.has(id)) state._customSel.delete(id); else state._customSel.add(id);
+    customCount.textContent = String(state._customSel.size);
+    if(state._customSel.has(id)) card.style.outline='2px solid var(--accent)'; else card.style.outline='none';
+  });
+  saveCustomBtn.addEventListener('click', ()=>{
+    const name = customName.value.trim();
+    if(!name || !state._customSel || state._customSel.size===0){ alert('Name and at least one flag required.'); return; }
+    const slug = 'USER:'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    const existing = state.userPresets.find(x=>x.id===slug);
+    const items = [...state._customSel];
+    if(existing){ existing.label=name; existing.items=items; }
+    else { state.userPresets.push({id:slug,label:name,items}); }
+    savePresets();
+    state.customMode = slug;
+    buildCustomOptions();
+    customSelect.value = slug;
+    updateDatalist();
+    buildLearn();
+    closeCustomBuilder();
+  });
+
+  // Build initial UI
+  buildCustomOptions();
+  updateDatalist();
+  buildLearn();
+
+  // Smoke tests
+  try {
+    const pool = dataUN;
+    const fr = pool.find(x=>x.name==='France');
+    const de = pool.find(x=>x.name==='Germany');
+    if (fr && de) {
+      console.assert(matches('France', de) === false, 'France should NOT match Germany');
+      console.assert(matches('Fra', fr) === true, 'Fra should match France');
+    }
+    const us = dataAll.find(x=>x.name==='United States');
+    if (us) console.assert(matches('Uni', us) === false, 'Uni is ambiguous among United...');
+    const sk = dataAll.find(x=>x.name==='South Korea');
+    if (sk) console.assert(matches('Republic of Korea', sk) === true, 'Alias should match South Korea');
+    console.log('Self-tests passed.');
+  } catch(err){ console.warn('Self-tests skipped', err); }
+})();
+</script>
+</body>
+</html>
