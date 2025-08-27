@@ -20,10 +20,18 @@
     .seg button.active{background:var(--accent);color:#111827}
 
     .panel{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-top:10px}
+    /* Add subtle shadow to panels for depth */
+    .panel{box-shadow:0 2px 4px rgba(0,0,0,0.1)}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .pill{padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.06)}
+    .pill{padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12)}
     .btn{border:0;border-radius:10px;padding:8px 12px;font-weight:700;background:var(--accent);color:#0b1020;cursor:pointer}
+    /* Provide subtle hover and active states for buttons */
+    .btn:hover{filter:brightness(1.1)}
+    .btn:active{transform:scale(0.97)}
     .btn.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.2)}
+    /* Style select elements that use the .btn classes similarly to buttons */
+    select.btn{appearance:none; border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; background:var(--panel); color:var(--text);}
+    select.btn.ghost{background:transparent;}
     .hidden{display:none!important}
 
     canvas{max-width:100%;height:auto;border-radius:10px;background:#0a0f1f}
@@ -69,12 +77,20 @@
         <div class="row">
           <span class="pill">Correct: <b id="ok">0</b></span>
           <span class="pill">Streak: <b id="streak">0</b></span>
+          <!-- Header for draw mode showing which flag to draw -->
+          <span id="drawHeader" class="hidden" style="margin-left:8px; font-weight:bold;"></span>
           <select id="customSelect" class="hidden"></select>
           <button class="btn ghost hidden" id="createCustomBtn">Create Custom</button>
         </div>
         <div class="row">
           <button class="btn" id="startBtn">Start</button>
-          <button class="btn ghost" id="memoryBtn">Memory Quiz</button>
+          <!-- Game mode selector replaces the old Memory Quiz button -->
+          <select id="modeSelect" class="btn ghost">
+            <option value="standard">Standard</option>
+            <option value="memory">Memory Quiz</option>
+            <option value="endless">Endless Hardcore</option>
+          <option value="draw">Draw from Memory</option>
+          </select>
           <button class="btn ghost" id="revealBtn" disabled>Reveal</button>
           <button class="btn" id="nextBtn" disabled>Next</button>
         </div>
@@ -84,6 +100,19 @@
         <datalist id="allnames"></datalist>
         <button class="btn" id="submitBtn" disabled>Submit</button>
       </div>
+      <!-- Draw mode controls: hidden by default -->
+      <div class="row hidden" id="drawControls" style="margin-top:8px; gap:8px;">
+        <label class="row" style="gap:4px; align-items:center;">
+          Brush Color
+          <input type="color" id="drawColor" value="#ff0000" list="flagColors">
+        </label>
+        <!-- Data list providing suggested colours from the current flag -->
+        <datalist id="flagColors"></datalist>
+        <label class="row" style="gap:4px; align-items:center;">
+          Brush Size
+          <input type="range" id="drawSize" min="1" max="30" value="5">
+        </label>
+      </div>
     </section>
 
     <section class="panel">
@@ -91,7 +120,7 @@
       <div id="result" style="margin-top:8px"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="learnPanel">
       <details open>
         <summary><b>Browse / Learn</b> — click to see what’s in the current pool</summary>
         <div class="list" id="learnList"></div>
@@ -193,7 +222,8 @@
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
   const startBtn = $('#startBtn');
-  const memoryBtn = $('#memoryBtn');
+  // Game mode selector
+  const modeSelect = $('#modeSelect');
   const revealBtn = $('#revealBtn');
   const nextBtn = $('#nextBtn');
   const submitBtn = $('#submitBtn');
@@ -204,6 +234,8 @@
   const okEl = $('#ok');
   const streakEl = $('#streak');
   const learnList = $('#learnList');
+  // Panel showing the browse/learn list (hidden in endless mode)
+  const learnPanel = $('#learnPanel');
   const customSelect = $('#customSelect');
   const createCustomBtn = $('#createCustomBtn');
   const customPanel = $('#customPanel');
@@ -213,6 +245,13 @@
   const customCount = $('#customCount');
   const customName = $('#customName');
   const saveCustomBtn = $('#saveCustomBtn');
+
+  // Additional elements for draw-from-memory mode
+  const answerRow = answer.closest('.row');
+  const drawControls = $('#drawControls');
+  const drawColor = $('#drawColor');
+  const drawSize = $('#drawSize');
+  const drawHeader = $('#drawHeader');
 
   // UI panels
   const uiBtn=$('#uiBtn'), uiPanel=$('#uiPanel'), closeUi=$('#closeUi');
@@ -409,9 +448,205 @@
   function updateDatalist(){ const list=getSource(); const opts=[]; list.forEach(e=>{opts.push(`<option value="${e.name}">`); (e.alt||[]).forEach(a=>opts.push(`<option value="${a}">`));}); $('#allnames').innerHTML=opts.join(''); }
   function buildLearn(){ const src=getSource(); learnList.innerHTML = src.map(x=>`<div class="item"><img loading="lazy" src="${x.flag}" alt="${x.name}"><small>${x.name}</small></div>`).join(''); }
 
-  function startGame(){ state.mode='standard'; state.ok=0; state.streak=0; okEl.textContent=0; streakEl.textContent=0; resultEl.textContent=''; state.quizPool=shuffle(getSource().slice()); answer.disabled=false; submitBtn.disabled=false; revealBtn.disabled=false; nextBtn.disabled=false; state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending)); nextFlag(); }
+  function startGame(){
+    // Start standard mode and reset counters
+    state.mode = 'standard';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = 0;
+    streakEl.textContent = 0;
+    resultEl.textContent = '';
+    state.quizPool = shuffle(getSource().slice());
+    // Hide draw header when leaving draw mode
+    drawHeader.classList.add('hidden');
+    // Ensure the answer input is visible and drawing controls are hidden
+    answer.classList.remove('hidden');
+    drawControls.classList.add('hidden');
+    // Enable inputs and show controls
+    answer.disabled = false;
+    submitBtn.disabled = false;
+    revealBtn.disabled = false;
+    nextBtn.disabled = false;
+    // Ensure the reveal and next buttons and learn panel are visible when not in endless mode
+    revealBtn.classList.remove('hidden');
+    nextBtn.classList.remove('hidden');
+    learnPanel.classList.remove('hidden');
+    // Reset effects to user-selected pending settings
+    state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending));
+    nextFlag();
+  }
 
-  function nextFlag(){ if(state.quizPool.length===0){ resultEl.innerHTML='<span class="warn">No flags left.</span>'; return; } state.current=state.quizPool.pop(); state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending)); drawFlag(state.current); scheduleTimer(); }
+  function nextFlag(){
+    // Draw the next flag in the quiz. In endless hardcore mode, randomize effects per flag.
+    if (state.quizPool.length === 0) {
+      resultEl.innerHTML = '<span class="warn">No flags left.</span>';
+      return;
+    }
+    state.current = state.quizPool.pop();
+    if (state.mode === 'endless') {
+      randomizeEffects();
+    } else {
+      // copy user-selected pending effects for standard and memory modes
+      state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending));
+    }
+    drawFlag(state.current);
+    scheduleTimer();
+  }
+
+  // Randomize flag effects for endless hardcore mode
+  function randomizeEffects(){
+    // Select up to two distinct effect categories to randomize; others remain at defaults.
+    const categories = ['blur','pixel','zoom','six','randColor','gs','inv','hue','sat','con'];
+    // Randomly choose 1 or 2 categories
+    const num = 1 + Math.floor(Math.random() * 2);
+    const chosen = [];
+    while(chosen.length < num){
+      const idx = Math.floor(Math.random() * categories.length);
+      const cat = categories[idx];
+      if(!chosen.includes(cat)) chosen.push(cat);
+    }
+    // Defaults for all effects
+    const p = {
+      blurOn: false, blurPx: 0,
+      pixelOn: false, pixel: 1,
+      zoomOn: false, zoom: 1,
+      six: false,
+      randColor: false,
+      gs: 0,
+      inv: 0,
+      hue: 0,
+      sat: 1,
+      con: 1
+    };
+    // Randomize selected categories
+    chosen.forEach(cat => {
+      switch(cat){
+        case 'blur':
+          p.blurOn = true;
+          p.blurPx = Math.random() * 20;
+          break;
+        case 'pixel':
+          p.pixelOn = true;
+          p.pixel = Math.floor(1 + Math.random() * 60);
+          break;
+        case 'zoom':
+          p.zoomOn = true;
+          p.zoom = 1 + Math.random() * 5;
+          break;
+        case 'six':
+          p.six = true;
+          break;
+        case 'randColor':
+          p.randColor = true;
+          break;
+        case 'gs':
+          p.gs = Math.random();
+          break;
+        case 'inv':
+          p.inv = Math.random();
+          break;
+        case 'hue':
+          p.hue = Math.random() * 360;
+          break;
+        case 'sat':
+          p.sat = Math.random() * 3;
+          break;
+        case 'con':
+          p.con = Math.random() * 3;
+          break;
+      }
+    });
+    state.effectsCurrent = p;
+  }
+
+  // Start Endless Hardcore mode: similar to standard mode but with random effects on each flag
+  function startEndless(){
+    state.mode = 'endless';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = 0;
+    streakEl.textContent = 0;
+    resultEl.textContent = '';
+    // build quiz pool from current source
+    state.quizPool = shuffle(getSource().slice());
+    // Enable answer and buttons
+    answer.disabled = false;
+    submitBtn.disabled = false;
+    // Hide the draw header in endless mode
+    drawHeader.classList.add('hidden');
+    // Ensure the answer input is visible and drawing controls are hidden
+    answer.classList.remove('hidden');
+    drawControls.classList.add('hidden');
+    // Hide controls that could be used to cheat in endless mode
+    revealBtn.classList.add('hidden');
+    nextBtn.classList.add('hidden');
+    learnPanel.classList.add('hidden');
+    // Ensure reveal and next are also disabled
+    revealBtn.disabled = true;
+    nextBtn.disabled = true;
+    // Start by drawing the first flag via nextFlag (randomization happens there)
+    nextFlag();
+  }
+
+  // Start Draw-from-Memory mode
+  function startDraw(){
+    state.mode = 'draw';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = 0;
+    streakEl.textContent = 0;
+    // Build quiz pool from current source
+    state.quizPool = shuffle(getSource().slice());
+    // Clear the result area; the country name and instructions will be set when the first flag is chosen
+    resultEl.innerHTML = '';
+    // Hide the answer input field but keep the submit button visible, and show drawing controls
+    answer.classList.add('hidden');
+    drawControls.classList.remove('hidden');
+    // Hide reveal and next buttons initially in draw mode
+    revealBtn.classList.add('hidden');
+    revealBtn.disabled = true;
+    nextBtn.classList.add('hidden');
+    nextBtn.disabled = true;
+    // Enable the submit button for drawing evaluation
+    submitBtn.disabled = false;
+    // Hide learn panel in draw mode
+    learnPanel.classList.add('hidden');
+    // Clear canvas and fill white background for drawing
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Show the draw header
+    drawHeader.classList.remove('hidden');
+    // Start with a new flag to draw
+    nextDraw();
+  }
+
+  // Advance to the next flag in draw-from-memory mode
+  function nextDraw(){
+    if(!state.quizPool || state.quizPool.length === 0){
+      state.quizPool = shuffle(getSource().slice());
+    }
+    state.current = state.quizPool.pop();
+    // Reset result message and prepare for a new drawing
+    // Show the country name at the top and instructions below
+    // Display the country name next to the streak in bold.  Use
+    // capitalised "Flag" for a polished look.
+    drawHeader.innerHTML = `<b>Draw: ${state.current.name}'s Flag</b>`;
+    resultEl.innerHTML = `<span class="muted">Draw the flag from memory, then click <b>Submit</b> to see how close you are.</span>`;
+    // Populate the colour picker suggestions with colours from this flag
+    generatePaletteForFlag(state.current.flag);
+    // Clear the drawing canvas
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Hide reveal and next buttons until the user submits their drawing
+    revealBtn.classList.add('hidden');
+    revealBtn.disabled = true;
+    nextBtn.classList.add('hidden');
+    nextBtn.disabled = true;
+    // Ensure the submit button is enabled for the new drawing
+    submitBtn.disabled = false;
+  }
 
   function scheduleTimer(){ if(state.hideTimeout){clearTimeout(state.hideTimeout); state.hideTimeout=null;} if(state.timerMs!==Infinity){ state.hideTimeout=setTimeout(()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resultEl.innerHTML='<span class="warn">⏱️ Time\'s up!</span>'; }, state.timerMs); } }
   function allNames(e){ return [e.name, ...(e.alt||[])]; }
@@ -432,18 +667,221 @@
     return false;
   }
 
+  // Convert an RGB pixel to a coarse colour category (white, black, red, yellow, green, blue).
+  // Uses HSV thresholds to classify colours. White and black are matched by brightness
+  // and saturation; hue ranges segment the remaining colours. Colours that fall
+  // outside these ranges default to 'red' (covering magenta and purple hues).
+  function classifyColor(r, g, b) {
+    const rf = r / 255, gf = g / 255, bf = b / 255;
+    const max = Math.max(rf, gf, bf);
+    const min = Math.min(rf, gf, bf);
+    const v = max;
+    const d = max - min;
+    let s = 0;
+    if (max !== 0) s = d / max;
+    // compute hue
+    let h = 0;
+    if (d !== 0) {
+      if (max === rf) {
+        h = ((gf - bf) / d) * 60;
+      } else if (max === gf) {
+        h = ((bf - rf) / d) * 60 + 120;
+      } else {
+        h = ((rf - gf) / d) * 60 + 240;
+      }
+      if (h < 0) h += 360;
+    }
+    // classification by brightness and saturation
+    if (v < 0.1) return 'black';
+    if (v > 0.9 && s < 0.1) return 'white';
+    // hue based categories
+    if (h < 20 || h >= 340) return 'red';
+    if (h < 65) return 'yellow';
+    if (h < 170) return 'green';
+    if (h < 275) return 'blue';
+    return 'red';
+  }
+
+  /**
+   * Generate a palette of colours extracted directly from a flag image.
+   *
+   * Unlike the coarse classification approach, this function performs a
+   * simple quantisation of all pixels to identify the actual colours
+   * present in the flag. The flag image is drawn into an offscreen
+   * canvas, and each pixel is quantised into a lower resolution
+   * colour space by rounding the R, G and B channels to the nearest
+   * multiple of 32 (i.e. 5 bits per channel). This allows similar
+   * shades to be grouped together while still preserving the variety
+   * of distinct colours. For each quantised colour cluster the
+   * average of the original RGB values is computed. The resulting
+   * palette is sorted by frequency (most common colours first) and
+   * used to populate the <datalist> for the brush colour picker. The
+   * first colour in the list is also set as the current brush colour.
+   *
+   * @param {string} url URL of the flag image to sample
+   */
+  function generatePaletteForFlag(url) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+      // Create an offscreen canvas to sample colours.  A modest
+      // resolution balances detail with performance.
+      const off = document.createElement('canvas');
+      off.width = 200;
+      off.height = 120;
+      const octx = off.getContext('2d');
+      // Draw the flag onto the offscreen canvas. Aspect ratio
+      // preservation is not critical for colour sampling.
+      octx.drawImage(img, 0, 0, off.width, off.height);
+      const pixels = octx.getImageData(0, 0, off.width, off.height).data;
+      // Map of quantised colour keys to aggregated stats
+      const clusters = {};
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+        // Quantise each channel to 5 bits (0-255 -> 0-255 in steps of 32)
+        const qR = Math.round(r / 32) * 32;
+        const qG = Math.round(g / 32) * 32;
+        const qB = Math.round(b / 32) * 32;
+        const key = `${qR},${qG},${qB}`;
+        if (!clusters[key]) {
+          clusters[key] = { sumR: 0, sumG: 0, sumB: 0, count: 0 };
+        }
+        clusters[key].sumR += r;
+        clusters[key].sumG += g;
+        clusters[key].sumB += b;
+        clusters[key].count++;
+      }
+      // Convert clusters into an array of {hex, count} objects
+      const palette = Object.keys(clusters).map(key => {
+        const { sumR, sumG, sumB, count } = clusters[key];
+        const avgR = Math.round(sumR / count);
+        const avgG = Math.round(sumG / count);
+        const avgB = Math.round(sumB / count);
+        const hex = '#' + [avgR, avgG, avgB]
+          .map(c => c.toString(16).padStart(2, '0'))
+          .join('');
+        return { hex, count };
+      });
+      // Sort by descending frequency (largest clusters first) then
+      // lexicographically for deterministic ordering
+      palette.sort((a, b) => b.count - a.count || a.hex.localeCompare(b.hex));
+      // Limit the palette to a reasonable number of colours (e.g. 8)
+      const colors = palette.slice(0, 8).map(p => p.hex);
+      const list = document.getElementById('flagColors');
+      if (list) {
+        list.innerHTML = colors.map(col => `<option value="${col}"></option>`).join('');
+      }
+      // Update the brush colour to the first colour in the palette
+      if (colors.length > 0) {
+        drawColor.value = colors[0];
+        ctx.strokeStyle = drawColor.value;
+      }
+    };
+    img.onerror = function() {
+      // On error, clear the datalist to avoid stale entries
+      const list = document.getElementById('flagColors');
+      if (list) list.innerHTML = '';
+    };
+    img.src = url;
+  }
+
   function submit(){
-    if(state.mode==='standard'){
+    if(state.mode==='draw'){
+      // In draw-from-memory mode, evaluate similarity between the drawn flag and the real flag
+      if(!state.current) return;
+      // Disable submit button to prevent multiple submissions
+      submitBtn.disabled = true;
+      try {
+        const drawnData = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+          const off = document.createElement('canvas');
+          off.width = canvas.width;
+          off.height = canvas.height;
+          const octx = off.getContext('2d');
+          octx.drawImage(img, 0, 0, off.width, off.height);
+          const flagData = octx.getImageData(0,0,off.width,off.height).data;
+          // Compute colour-category similarity instead of raw RGB differences.  For each pixel
+          // classify both the drawn and the real flag colours into coarse categories
+          // (white, black, red, yellow, green, blue) and count matches.  The final
+          // percentage is the fraction of pixels whose categories match.
+          let matchesCount = 0;
+          const totalPixels = drawnData.length / 4;
+          for(let i=0; i<drawnData.length; i+=4){
+            const dc = classifyColor(drawnData[i], drawnData[i+1], drawnData[i+2]);
+            const fc = classifyColor(flagData[i], flagData[i+1], flagData[i+2]);
+            if(dc === fc) matchesCount++;
+          }
+          const closeness = totalPixels > 0 ? matchesCount / totalPixels : 0;
+          const percent = closeness * 100;
+          // Show similarity and also display the actual flag image below.
+          const score = percent.toFixed(2);
+          resultEl.innerHTML =
+            'Your drawing matches the real flag by ' + score + '%'
+            + '<br><span class="warn">Actual Flag:</span><br>'
+            + '<img src="' + state.current.flag + '" style="max-width:100%;border-radius:8px;margin-top:4px;">';
+          // Show the Next button to allow proceeding to another flag
+          nextBtn.classList.remove('hidden');
+          nextBtn.disabled = false;
+          // Keep reveal button hidden in draw mode
+          revealBtn.classList.add('hidden');
+          revealBtn.disabled = true;
+        };
+        img.onerror = function() {
+          // On error computing similarity, inform the user and show the real flag anyway
+          resultEl.innerHTML = 'Could not compute similarity.'
+            + '<br><span class="warn">Actual Flag:</span><br>'
+            + '<img src="' + state.current.flag + '" style="max-width:100%;border-radius:8px;margin-top:4px;">';
+          nextBtn.classList.remove('hidden');
+          nextBtn.disabled = false;
+        };
+        img.src = state.current.flag;
+      } catch(err) {
+        // Generic error computing similarity: show message and real flag
+        resultEl.innerHTML = 'Could not compute similarity.'
+          + '<br><span class="warn">Actual Flag:</span><br>'
+          + '<img src="' + state.current.flag + '" style="max-width:100%;border-radius:8px;margin-top:4px;">';
+        nextBtn.classList.remove('hidden');
+        nextBtn.disabled = false;
+      }
+      return;
+    } else if(state.mode==='standard' || state.mode==='endless'){
       if(!state.current) return;
       const val=answer.value.trim(); if(!val) return; answer.value='';
       if(matches(val,state.current)){
-        state.ok++; state.streak++; okEl.textContent=state.ok; streakEl.textContent=state.streak;
-        resultEl.innerHTML=`<span class="ok">Correct!</span> ${state.current.name}`;
+        // correct answer: increment counters and move to next flag
+        state.ok++; state.streak++;
+        okEl.textContent = state.ok;
+        streakEl.textContent = state.streak;
+        if(state.mode === 'endless'){
+          resultEl.innerHTML = `<span class="ok">Correct!</span>`;
+        } else {
+          resultEl.innerHTML = `<span class="ok">Correct!</span> ${state.current.name}`;
+        }
         nextFlag();
       } else {
-        state.streak=0; streakEl.textContent=0;
-        resultEl.innerHTML=`<span class="bad">Nope.</span> (${state.current.name})`;
-        if(state.effectsCurrent.six && state.piecesRevealed<6){ state.piecesRevealed++; renderCurrent(); }
+        // incorrect guess
+        state.streak = 0;
+        streakEl.textContent = 0;
+        if(state.mode === 'endless'){
+          // In endless mode, end the game and display Game Over on the canvas
+          resultEl.innerHTML = `<span class="bad">Game Over</span>`;
+          answer.disabled = true;
+          submitBtn.disabled = true;
+          revealBtn.disabled = true;
+          nextBtn.disabled = true;
+          // Clear canvas and draw Game Over text
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bad') || '#fb7185';
+          ctx.font = 'bold 48px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Game Over', canvas.width/2, canvas.height/2);
+        } else {
+          resultEl.innerHTML = `<span class="bad">Nope.</span> (${state.current.name})`;
+          if(state.effectsCurrent.six && state.piecesRevealed<6){ state.piecesRevealed++; renderCurrent(); }
+        }
       }
       answer.focus();
     } else if(state.mode==='memory'){
@@ -463,6 +901,15 @@
 
   async function startMemory(){
     state.mode='memory'; resultEl.textContent='';
+    // Hide draw header in memory mode
+    drawHeader.classList.add('hidden');
+    // Ensure the answer input is visible and drawing controls are hidden when entering memory mode
+    answer.classList.remove('hidden');
+    drawControls.classList.add('hidden');
+    // Ensure controls and learn panel are visible when entering memory mode
+    revealBtn.classList.remove('hidden');
+    nextBtn.classList.remove('hidden');
+    learnPanel.classList.remove('hidden');
     const src=shuffle(getSource().slice()); state.memory.sequence=src.slice(0,5); state.memory.index=0;
     answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true; nextBtn.disabled=true;
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -523,12 +970,98 @@
     updateDatalist(); buildLearn(); resultEl.textContent='';
   });
 
-  startBtn.addEventListener('click', startGame);
-  nextBtn.addEventListener('click', nextFlag);
-  revealBtn.addEventListener('click', ()=>{ if(state.current){ state.piecesRevealed = 6; renderCurrent(); resultEl.innerHTML=`<span class="warn">Answer:</span> ${state.current.name}`; }});
+  // Start button chooses a mode based on the game mode selector
+  startBtn.addEventListener('click', () => {
+    const mode = modeSelect.value || 'standard';
+    if (mode === 'memory') {
+      startMemory();
+    } else if (mode === 'endless') {
+      startEndless();
+    } else if (mode === 'draw') {
+      startDraw();
+    } else {
+      startGame();
+    }
+  });
+  nextBtn.addEventListener('click', () => {
+    if(state.mode === 'draw'){
+      nextDraw();
+    } else {
+      nextFlag();
+    }
+  });
+  revealBtn.addEventListener('click', () => {
+    if(!state.current) return;
+    if(state.mode === 'draw'){
+      // Show the actual flag for comparison in draw mode
+      resultEl.innerHTML = `<span class="warn">Actual Flag:</span><br><img src="${state.current.flag}" style="max-width:100%;border-radius:8px;margin-top:4px;"><br>${state.current.name}`;
+    } else {
+      state.piecesRevealed = 6;
+      renderCurrent();
+      resultEl.innerHTML = `<span class="warn">Answer:</span> ${state.current.name}`;
+    }
+  });
   submitBtn.addEventListener('click', submit);
   answer.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
-  memoryBtn.addEventListener('click', startMemory);
+  // removed memoryBtn click listener (replaced by mode selector)
+
+  // Update the stroke colour whenever the user picks a new colour
+  drawColor.addEventListener('input', () => {
+    ctx.strokeStyle = drawColor.value;
+  });
+
+  // Drawing logic for draw-from-memory mode
+  let drawing = false;
+  let lastX = 0;
+  let lastY = 0;
+  // Pointer-based drawing: capture pointer to avoid accidental
+  // termination when the pointer leaves the canvas. We call
+  // setPointerCapture on pointerdown and releasePointerCapture on
+  // pointerup. The end of a drawing stroke is handled only on
+  // pointerup.
+  canvas.addEventListener('pointerdown', (e) => {
+    if(state.mode !== 'draw') return;
+    drawing = true;
+    try {
+      // capture the pointer so drawing continues even if the pointer
+      // leaves the canvas bounds
+      canvas.setPointerCapture(e.pointerId);
+    } catch(err) { /* ignore if unsupported */ }
+    // Set stroke style and size based on user controls
+    ctx.strokeStyle = drawColor.value;
+    ctx.lineWidth = parseFloat(drawSize.value);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    lastX = x;
+    lastY = y;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if(!drawing || state.mode !== 'draw') return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    lastX = x;
+    lastY = y;
+  });
+  function endDrawingEvent(e) {
+    if(state.mode !== 'draw') return;
+    drawing = false;
+    if(e && typeof e.pointerId === 'number') {
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch(err) { /* ignore if unsupported */ }
+    }
+  }
+  canvas.addEventListener('pointerup', endDrawingEvent);
+  // We intentionally do not end drawing on pointerleave to prevent
+  // accidental cut‑offs; pointerup will properly end the stroke.
 
   function buildCustomOptions(){
     const base=[
