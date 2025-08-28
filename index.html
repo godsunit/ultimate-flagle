@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ultimate Flagle</title>
+  <!-- External libraries for the Region Snapshot game mode. These scripts provide
+       geographic projection and TopoJSON conversion capabilities via D3 and
+       TopoJSON Client. Without these the map cannot be rendered. -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
   <style>
     :root{
       --accent:#93c5fd;
@@ -147,6 +152,133 @@
       opacity:0;
       transition: opacity 0.3s ease;
     }
+
+    /* Layout for the Odd One Out game: a simple 2x2 grid of flags */
+    .odd-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:var(--conn-gap);
+    }
+    .odd-grid .flag-card{
+      position:relative;
+      cursor:pointer;
+      border:2px solid transparent;
+      border-radius:var(--card-radius);
+      overflow:hidden;
+      aspect-ratio:3/2;
+      background: var(--panel);
+    }
+    .odd-grid .flag-card img{
+      width:100%;
+      height:100%;
+      display:block;
+      object-fit:contain;
+      object-position:center;
+    }
+
+    /* ------- Region Snapshot styles ------- */
+    /* The SVG within the region map container fills its parent.  A background
+       colour is provided via the parent (#regionMap) so countries with holes
+       still display dark ocean. */
+    #regionMap {
+      /* Provide a light background so that country shapes stand out clearly
+         against the surrounding ocean. Using a light neutral colour improves
+         contrast compared to the dark panels used elsewhere. */
+      /* Use an off‑white background behind the map.  This soft colour
+         provides clear contrast with the country shapes and blends
+         nicely with both dark and light themes. */
+      /* Use an off‑white background to improve contrast between
+         countries and the map background.  This ensures that even
+         smaller countries remain visible against the pale ocean. */
+      background: #f8fafc;
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    #regionMap svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    /* Base styling for country paths.  Neutral fill and faint stroke to
+       distinguish borders.  Classes are added dynamically to indicate
+       hover, correct or incorrect states. */
+    #regionMap .country {
+      /* Use a pastel blue‑grey fill colour for country shapes so
+         they stand out clearly against the very light map background.
+         This improves visibility of smaller islands and regions. */
+      fill: #cbd5e1;
+      stroke: rgba(0,0,0,0.25);
+      stroke-width: 0.6;
+      cursor: pointer;
+      transition: fill 0.2s ease;
+    }
+    #regionMap .country.hover {
+      /* When hovering a country, tint it with a semi‑transparent colour.
+         The highlight should contrast against the base fill colour so
+         players can easily see which country is under the cursor. */
+      fill: rgba(147,197,253,0.6);
+    }
+    #regionMap .country.correct {
+      fill: var(--ok);
+    }
+    #regionMap .country.incorrect {
+      fill: var(--bad);
+    }
+    /* Styling for draggable flag cards in the region mode.  Flags
+       resemble those in other modes but support dragging and have a
+       grab cursor. */
+    .flag-draggable {
+      width: 96px;
+      height: 72px;
+      border: 2px solid transparent;
+      border-radius: var(--card-radius);
+      overflow: hidden;
+      background: var(--panel);
+      margin: 4px;
+      cursor: grab;
+      /* Make the flag container relative so that the name label can be
+         absolutely positioned inside it. */
+      position: relative;
+      transition: transform 0.1s ease;
+    }
+    .flag-draggable img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      object-position: center;
+      pointer-events: none;
+    }
+    .flag-draggable.dragging {
+      opacity: 0.6;
+      cursor: grabbing;
+    }
+
+    /* Label displaying the country name below each flag.  Hidden by default;
+       toggled by the region names setting.  Positioned at the bottom of
+       the flag card with a white background and dark text. */
+    .flag-name {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.9);
+      color: #111;
+      font-weight: bold;
+      font-size: 12px;
+      text-align: center;
+      padding: 2px 1px;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      /* Hide by default; will be shown when regionShowNames is true */
+      display: none;
+      pointer-events: none;
+    }
+    .odd-grid .flag-card.selected{
+      border-color: var(--accent);
+      transform: scale(1.03);
+      box-shadow: 0 0 0 3px var(--accent), 0 2px 6px rgba(0,0,0,0.4);
+    }
     #connectionsTop{
       display:flex;
       flex-wrap:wrap;
@@ -284,6 +416,58 @@
       padding:12px;
     }
     .muted{color:var(--muted);font-size:12px}
+
+    /* Override styles for region flags in Region Snapshot mode. We use
+       more specific selectors (#regionFlags) so these rules take
+       precedence over the generic .flag-draggable definitions defined
+       earlier. Flags are stacked vertically with the country name
+       label below the image. The container height expands to fit
+       both elements, preventing overlap. */
+    #regionFlags .flag-draggable {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      /* Provide a small gap between the flag image and the label */
+      gap: 2px;
+      width: 96px;
+      height: auto;
+      cursor: grab;
+      /* Allow the country name label to extend beyond the image; this
+         overrides the default overflow:hidden from the generic
+         .flag-draggable rule. */
+      overflow: visible;
+    }
+
+    #regionFlags .flag-draggable img {
+      height: 64px;
+    }
+
+    #regionFlags .flag-draggable.dragging {
+      opacity: 0.6;
+      cursor: grabbing;
+    }
+
+    #regionFlags .flag-name {
+      width: 100%;
+      background: rgba(255,255,255,0.9);
+      color: #111;
+      font-weight: bold;
+      font-size: 12px;
+      text-align: center;
+      padding: 2px 1px;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      /* Hide by default; toggled via updateRegionNameDisplay() */
+      display: none;
+      /* Position static so the label flows below the flag in the flex layout */
+      position: static;
+    }
+
+    /* When the show-names class is applied to the container, display
+       the flag names.  We use !important to override the default
+       display:none defined above. */
+    #regionFlags.show-names .flag-name {
+      display: block !important;
+    }
   </style>
 </head>
 <body>
@@ -330,6 +514,10 @@
             <option value="draw">🖌️ Draw The Flag</option>
             <option value="endless">∞ Endless Hardcore</option>
             <option value="connections">🔗 Flag Connections</option>
+        <!-- New Odd One Out game mode option -->
+        <option value="odd">🧩 Odd One Out</option>
+        <!-- Region Snapshot game mode option -->
+        <option value="region">🌍 Region Snapshot</option>
           </select>
           <button class="btn ghost" id="revealBtn" disabled>Reveal</button>
           <button class="btn" id="nextBtn" disabled>Next</button>
@@ -404,12 +592,54 @@
       </div>
     </section>
 
+  <!-- Odd One Out game panel (hidden by default) -->
+  <section class="panel hidden" id="oddPanel">
+    <!-- Grid of 4 flags for odd one out -->
+    <div id="oddGrid" class="odd-grid" style="margin-bottom:8px;"></div>
+    <!-- Mistakes indicator for odd one out: will display remaining mistakes as dots (or hide if unlimited) -->
+    <div class="row hidden" id="oddMistakesRow" style="gap:6px; align-items:center; margin-bottom:8px;"></div>
+    <!-- Controls for odd one out: submit guess, next button, and status display -->
+    <div class="row" id="oddControls" style="gap:8px; align-items:center;">
+      <button class="btn" id="oddSubmit" disabled>Submit</button>
+      <button class="btn hidden" id="oddNext">Next</button>
+      <span id="oddStatus" class="muted" style="margin-left:auto;"></span>
+    </div>
+    <!-- Instructions for odd one out will be injected here -->
+    <div id="oddInstructions" class="muted" style="margin-top:8px;"></div>
+  </section>
+
+      <!-- Region Snapshot game panel (hidden by default).  This panel displays
+           a zoomed in map of a random region along with a row of draggable
+           flags for that region.  Players drag each flag onto its correct
+           country. -->
+      <section class="panel hidden" id="regionPanel">
+        <!-- SVG container for the map.  The map is dynamically generated
+             using D3 based on a randomly chosen region.  The SVG will be
+             sized to fit this container. -->
+        <div id="regionMap" style="width:100%; height:420px; position:relative; border-radius:10px; overflow:hidden;"></div>
+        <!-- Container for the draggable flags.  Each flag is represented
+             by a small card that can be dragged onto the map. -->
+        <div id="regionFlags" class="row" style="margin-top:8px; flex-wrap:wrap; justify-content:center;"></div>
+        <!-- Controls and status area for the region game.  The reset button
+             allows players to play another random region once the current
+             one is complete. -->
+        <div class="row" style="margin-top:8px; align-items:center; gap:8px;">
+          <button class="btn hidden" id="regionResetBtn">New Region</button>
+          <span id="regionStatus" class="muted"></span>
+        </div>
+      </section>
+
     <section class="panel" id="learnPanel">
       <details open>
         <summary><b>Browse / Learn</b> — click to see what’s in the current pool</summary>
         <div class="list" id="learnList"></div>
       </details>
     </section>
+
+    <!-- Unified instructions panel shown below the active game. This will display
+         how to play information for the current mode. It is updated each
+         time a mode starts. -->
+    <div id="gameInstructions" class="muted" style="margin-top:12px;"></div>
   </div>
 
   <!-- UI panel -->
@@ -442,6 +672,11 @@
       <label>Anim Speed</label>
       <input id="speedRange" type="range" min="0.1" max="2" step="0.1" value="0.4"><span id="speedVal">0.4s</span>
     </div>
+      <!-- Toggle for showing country names under flags in Region Snapshot -->
+      <div style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+        <span title="Show country names under flags">🏷️</span>
+        <input type="checkbox" id="regionNameToggle"> Show country names (Region Snapshot)
+      </div>
   </div>
 
   <!-- Custom preset builder -->
@@ -555,6 +790,14 @@
       </label>
     </div>
 
+    <!-- Option to disable mistake limit specifically for Odd One Out -->
+    <div class="row" style="align-items:center; gap:4px; margin-top:8px;">
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Unlimited mistakes">♾️</span>
+        <input type="checkbox" id="unlimitedOddMistakesToggle"> Unlimited mistakes (Odd One Out)
+      </label>
+    </div>
+
     <div class="muted" id="applyNote">Changes apply to the <b>next</b> flag.</div>
     <!-- Preview canvas showing USA flag with current effect settings -->
     <div id="previewContainer" style="text-align:center;margin-top:12px;">
@@ -579,6 +822,8 @@
     draw: '🖌️ Draw The Flag',
     endless: '∞ Endless Hardcore',
     connections: '🔗 Flag Connections'
+    , odd: '🧩 Odd One Out'
+    , region: '🌍 Region Snapshot'
   };
   const revealBtn = $('#revealBtn');
   const nextBtn = $('#nextBtn');
@@ -634,6 +879,81 @@
   const connectionsShuffle = $('#connectionsShuffle');
   const connectionsSubmit = $('#connectionsSubmit');
   const connectionsStatus = $('#connectionsStatus');
+
+  // Elements for Odd One Out mode
+  const oddPanel = $('#oddPanel');
+  const oddGrid = $('#oddGrid');
+  const oddSubmit = $('#oddSubmit');
+  const oddStatus = $('#oddStatus');
+  const oddMistakesRow = $('#oddMistakesRow');
+  const oddNext = $('#oddNext');
+  const oddInstructionsEl = $('#oddInstructions');
+  const unlimitedOddMistakesToggle = $('#unlimitedOddMistakesToggle');
+  const gameInstructions = $('#gameInstructions');
+
+  // Elements for the Region Snapshot mode
+  const regionPanel = $('#regionPanel');
+  const regionMapEl = $('#regionMap');
+  const regionFlags = $('#regionFlags');
+  const regionResetBtn = $('#regionResetBtn');
+const regionNameToggle = $('#regionNameToggle');
+  const regionStatus = $('#regionStatus');
+
+  // Data for Region Snapshot mode
+  let worldData = null;            // GeoJSON features for all countries
+  let regionFeatures = [];         // Features in the current region
+  let regionFlagsData = [];        // List of flags for the current region
+  let regionProjection = null;     // Current map projection used for converting centroids
+  let regionPath = null;           // Current geoPath generator with projection
+  let regionDragging = null;       // Currently dragged flag element
+  // Track the current zoom transform applied to the region map.  The zoom
+  // transform is updated on each zoom event and used when snapping flags
+  // so that they align with the transformed map view.  Initialized to
+  // the identity transform.  See handleRegionDrop for usage.
+  let regionZoomTransform = d3.zoomIdentity;
+
+  // Keep track of flags that have been snapped onto the map in the
+  // Region Snapshot mode.  Each entry stores the element and the
+  // corresponding GeoJSON feature.  When the map is zoomed or
+  // panned, all snapped flags must be repositioned and resized to
+  // remain anchored to their respective countries.  The baseWidth
+  // and baseHeight define the default flag size at zoom k=1.
+  let snappedFlags = [];
+
+  /**
+   * Update the positions and sizes of all snapped flags according to the
+   * current zoom transform.  Each flag's centroid is computed via
+   * regionPath.centroid(feature) in map coordinates.  These are then
+   * converted to screen coordinates using regionZoomTransform.applyX/Y.
+   * The flag size is scaled inversely by the zoom scale so that
+   * flags appear smaller when zooming in and larger when zooming out.
+   */
+  function updateSnappedFlags() {
+    if (!regionPath || !regionZoomTransform) return;
+    const k = regionZoomTransform.k || 1;
+    const baseW = 40;
+    const baseH = 28;
+    snappedFlags.forEach(item => {
+      const feature = item.feature;
+      const el = item.el;
+      // Compute centroid in map coordinates
+      let [cx, cy] = regionPath.centroid(feature);
+      // Transform to screen coordinates using the current zoom transform
+      if (regionZoomTransform && typeof regionZoomTransform.applyX === 'function') {
+        cx = regionZoomTransform.applyX(cx);
+        cy = regionZoomTransform.applyY(cy);
+      }
+      // Compute size inversely proportional to zoom scale
+      const w = baseW / k;
+      const h = baseH / k;
+      el.style.position = 'absolute';
+      el.style.zIndex = 50;
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+      el.style.left = `${cx - w / 2}px`;
+      el.style.top = `${cy - h / 2}px`;
+    });
+  }
 
   // Current drawing tool ('pen','eraser','fill','picker','line','rect','circle','ellipse','triangle')
   let currentTool = 'pen';
@@ -962,6 +1282,589 @@
     }
   }
 
+  /**
+   * Update the mistakes display for Odd One Out mode. When unlimited
+   * mistakes are enabled, the row of circles is hidden and the
+   * scoreboard pill shows how many mistakes have been used. When
+   * limited mistakes are in effect, show a row of dots indicating
+   * remaining mistakes. Outside of odd mode, hide both displays.
+   */
+  function updateOddMistakesDisplay() {
+    // Show mistakes only during odd mode
+    if (state.mode !== 'odd') {
+      if (oddMistakesRow) oddMistakesRow.classList.add('hidden');
+      if (mistakesPill) mistakesPill.classList.add('hidden');
+      return;
+    }
+    if (state.oddUnlimitedMistakes) {
+      // Hide row and show pill with count
+      if (oddMistakesRow) oddMistakesRow.classList.add('hidden');
+      if (mistakesPill) {
+        mistakesPill.classList.remove('hidden');
+        if (mistakesCount) mistakesCount.textContent = state.oddMistakesUsed;
+      }
+    } else {
+      // Limited mistakes: show row with dots; hide pill
+      if (mistakesPill) mistakesPill.classList.add('hidden');
+      if (oddMistakesRow) {
+        oddMistakesRow.classList.remove('hidden');
+        const maxM = state.oddMaxMistakes || 2;
+        let html = '';
+        html += '<span class="muted">Mistakes Remaining:</span>';
+        for (let i = 0; i < maxM; i++) {
+          const used = i < state.oddMistakesUsed;
+          html += `<span class="mistake-dot${used ? ' used' : ''}"></span>`;
+        }
+        oddMistakesRow.innerHTML = html;
+      }
+    }
+  }
+
+  /**
+   * Update the display of country names under region flags.  This reads
+   * the regionNameToggle checkbox and shows or hides the .flag-name
+   * element for each draggable flag in the region panel.  Names on
+   * snapped flags inside the map are also updated.
+   */
+  function updateRegionNameDisplay() {
+    if (!regionNameToggle) return;
+    state.regionShowNames = regionNameToggle.checked;
+    const show = state.regionShowNames;
+    // Toggle a class on the flags container to control name visibility via CSS.
+    // We deliberately avoid applying the class to the map container, because
+    // country names should only appear under the draggable flags in the
+    // bottom bar, not on the flags that have been snapped onto the map.
+    if (show) {
+      regionFlags.classList.add('show-names');
+    } else {
+      regionFlags.classList.remove('show-names');
+    }
+  }
+
+  // ----------------- Region Snapshot Mode Functions -----------------
+  // Define a set of coarse geographic regions with bounding boxes. Each entry
+  // contains a descriptive name and the minLon, minLat, maxLon and maxLat
+  // values for the region. These boxes are approximations and need not be
+  // perfect; they simply select clusters of neighbouring countries for the
+  // map to zoom into. The selection is randomised on each round.
+  const regionDefinitions = [
+    { name: 'West Africa', bbox: [-20, 0, 15, 20] },
+    { name: 'Central America', bbox: [-100, 5, -77, 19] },
+    { name: 'Scandinavia', bbox: [5, 55, 30, 72] },
+    { name: 'Southeast Asia', bbox: [95, -10, 150, 25] },
+    { name: 'Southern Africa', bbox: [10, -35, 35, -10] },
+    { name: 'Middle East', bbox: [30, 10, 60, 40] },
+    { name: 'Balkans', bbox: [18, 36, 30, 48] },
+    { name: 'Andes', bbox: [-85, -60, -60, 5] },
+    { name: 'Caribbean', bbox: [-90, 10, -60, 25] },
+    { name: 'Central Europe', bbox: [5, 45, 20, 55] },
+    { name: 'North Africa', bbox: [-20, 20, 40, 40] },
+    { name: 'East Asia', bbox: [100, 20, 150, 50] }
+  ];
+
+  /**
+   * Ensure the world data (country shapes) is loaded.  Fetches the
+   * TopoJSON from the jsDelivr CDN and converts it to GeoJSON using
+   * the topojson-client library.  This function is idempotent and
+   * caches the result in the worldData variable.
+   */
+  async function ensureWorldData() {
+    if (worldData) return;
+    try {
+      const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+      const topo = await resp.json();
+      // The countries are stored in the "countries" object. Convert them
+      // to a GeoJSON feature collection.  The id property corresponds to
+      // the ISO3166-1 alpha-3 code.
+      worldData = topojson.feature(topo, topo.objects.countries).features;
+    } catch(err) {
+      console.error('Failed to load world atlas', err);
+      worldData = [];
+    }
+  }
+
+  /**
+   * Select a random region definition from the list.  Returns a new
+   * object so that modifications to the chosen region do not affect
+   * the original definitions.
+   */
+  /**
+   * Select a random region on the globe.  We choose a random centre
+   * coordinate and construct a bounding box of fixed width/height in
+   * degrees.  We then check which world features intersect that box.
+   * If at least two countries intersect, we return that random region.
+   * Otherwise we try again up to 10 times.  If no random region
+   * contains multiple countries, we fall back to one of the predefined
+   * regionDefinitions.
+   * @returns {Object} an object containing a name and bbox [lonMin,latMin,lonMax,latMax]
+   */
+  function randomRegion() {
+    // Attempt to find a random bounding box containing at least two countries.
+    // To make the game feel fresh we vary the window size on each try and
+    // increase the number of attempts.  This increases the likelihood
+    // of finding an arbitrary patch of the world with multiple
+    // neighbouring countries instead of falling back to the same
+    // handful of predefined regions.  Bounding boxes can range from
+    // roughly 30–50° in longitude and 20–30° in latitude.
+    const maxAttempts = 40;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Random centre within reasonable latitudes to avoid the poles
+      const lonCenter = -170 + Math.random() * 340; // [-170, +170]
+      const latCenter = -50 + Math.random() * 100;  // [-50, +50]
+      // Choose a random window size for this attempt.  Allow
+      // slightly larger widths and heights to capture more countries.
+      // Choose a random window size for this attempt.  Allow wider
+      // and taller windows to increase the chance of capturing multiple
+      // neighbouring countries.  Width ranges from 40–60° and height
+      // from 25–40°.
+      // Aim for a larger window to capture multiple countries.  Choose
+      // width between 40 and 70 degrees and height between 25 and
+      // 50 degrees.  Larger windows increase the chance of including
+      // several neighbouring countries.
+      const width = 40 + Math.random() * 30;  // 40–70 degrees
+      const height = 25 + Math.random() * 25; // 25–50 degrees
+      let lonMin = lonCenter - width / 2;
+      let lonMax = lonCenter + width / 2;
+      let latMin = latCenter - height / 2;
+      let latMax = latCenter + height / 2;
+      // Clamp latitude to [-90, 90]
+      latMin = Math.max(-90, latMin);
+      latMax = Math.min(90, latMax);
+      // Normalise longitude: handle wrap‑around at ±180.  If the box
+      // crosses the international date line, we'll treat it as spanning
+      // both ends of the range by adjusting the min/max accordingly.
+      if (lonMin < -180) lonMin += 360;
+      if (lonMax > 180) lonMax -= 360;
+      const bbox = [lonMin, latMin, lonMax, latMax];
+      // Determine how many countries intersect this bounding box
+      const intersectsCount = worldData.filter(f => featureIntersectsBbox(f, bbox)).length;
+      if (intersectsCount >= 2) {
+        return { name: 'Random Region', bbox };
+      }
+    }
+    // Fallback: pick a predefined region if no random region is found
+    const idx = Math.floor(Math.random() * regionDefinitions.length);
+    const reg = regionDefinitions[idx];
+    return { name: reg.name, bbox: reg.bbox.slice() };
+  }
+
+  /**
+   * Determine whether a GeoJSON feature intersects a bounding box.  The
+   * feature's bounding box is computed via d3.geoBounds.  The bbox
+   * parameter is an array [lonMin, latMin, lonMax, latMax].  This
+   * helper correctly handles cases where the bounding box crosses the
+   * anti‑meridian (lonMin > lonMax).
+   * @param {Object} feature GeoJSON feature with coordinates
+   * @param {Array<number>} bbox [lonMin,latMin,lonMax,latMax]
+   * @returns {boolean} true if the feature intersects the bbox
+   */
+  function featureIntersectsBbox(feature, bbox) {
+    const bounds = d3.geoBounds(feature);
+    const fLonMin = bounds[0][0];
+    const fLatMin = bounds[0][1];
+    const fLonMax = bounds[1][0];
+    const fLatMax = bounds[1][1];
+    const regionLonMin = bbox[0];
+    const regionLatMin = bbox[1];
+    const regionLonMax = bbox[2];
+    const regionLatMax = bbox[3];
+    // Check latitude overlap first
+    const latOverlap = fLatMin <= regionLatMax && fLatMax >= regionLatMin;
+    if (!latOverlap) return false;
+    // Handle longitude overlap.  If the bbox crosses the dateline,
+    // consider wrap‑around: the bbox effectively covers two ranges.
+    if (regionLonMin <= regionLonMax) {
+      // Normal case: simple range overlap
+      return fLonMin <= regionLonMax && fLonMax >= regionLonMin;
+    } else {
+      // Crossing dateline: region covers [lonMin,180] ∪ [-180,lonMax]
+      const overlap1 = fLonMin <= 180 && fLonMax >= regionLonMin;
+      const overlap2 = fLonMin <= regionLonMax && fLonMax >= -180;
+      return overlap1 || overlap2;
+    }
+  }
+
+  /**
+   * Start the Region Snapshot mode.  Resets the score counters, hides
+   * the UI of other modes, shows the region panel, loads the world
+   * GeoJSON if needed, selects a random region and prepares the map
+   * and flags for the player to drag and drop.
+   */
+  async function startRegion() {
+    // Set state and reset counters
+    state.mode = 'region';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = 0;
+    streakEl.textContent = 0;
+    // Hide panels from other modes
+    drawHeader.classList.add('hidden');
+    drawControls.classList.add('hidden');
+    connectionsPanel.classList.add('hidden');
+    oddPanel.classList.add('hidden');
+    canvas.classList.add('hidden');
+    resultEl.classList.add('hidden');
+    resultEl.innerHTML = '';
+    answer.classList.add('hidden');
+    answer.disabled = true;
+    submitBtn.classList.add('hidden');
+    submitBtn.disabled = true;
+    revealBtn.classList.add('hidden');
+    nextBtn.classList.add('hidden');
+    revealBtn.disabled = true;
+    nextBtn.disabled = true;
+    learnPanel.classList.add('hidden');
+    // Hide mistakes UI from odd and connections modes
+    if (mistakesRow) mistakesRow.classList.add('hidden');
+    if (oddMistakesRow) oddMistakesRow.classList.add('hidden');
+    if (mistakesPill) mistakesPill.classList.add('hidden');
+    // Show the region panel
+    regionPanel.classList.remove('hidden');
+    // Reset flags and status.  Remove any previously placed flags from
+    // the map container by selecting those that are no longer draggable.
+    regionStatus.textContent = '';
+    regionFlags.innerHTML = '';
+    // Remove any flags that were previously placed onto the map.  These
+    // flags no longer have the draggable attribute so they can be
+    // identified and cleaned up.  We remove all flag elements inside
+    // the map container to ensure a clean slate.
+    regionMapEl.querySelectorAll('.flag-draggable').forEach(el => el.remove());
+    // Clear the list of snapped flags because a new region will be loaded
+    snappedFlags = [];
+    regionResetBtn.classList.add('hidden');
+    // Ensure world data is available
+    await ensureWorldData();
+    // Choose a random region and precompute the features.  We may need to
+    // attempt several times to ensure at least two countries are in view.
+    let region = randomRegion();
+    let attempts = 10;
+    let features = [];
+    while (attempts > 0) {
+      // Include any country that intersects the region bounding box
+      features = worldData.filter(f => featureIntersectsBbox(f, region.bbox));
+      if (features.length >= 3) break;
+      region = randomRegion();
+      attempts--;
+    }
+    if (features.length < 3) {
+      // Fallback to the first few countries if no region has enough countries.
+      // Use at least three countries to ensure there is a meaningful region.
+      features = worldData.slice(0, 4);
+    }
+    // Draw the entire world map to provide context
+    drawRegionMap(worldData);
+    // Save the projection used for the world map so we can compute pixel
+    // coordinates of the region bounding box
+    const worldProj = regionProjection;
+    const width = regionMapEl.clientWidth;
+    const height = regionMapEl.clientHeight;
+    // Compute the bounding box of the selected region in pixel coordinates
+    const [x0, y0] = worldProj([region.bbox[0], region.bbox[3]]); // lon min, lat max
+    const [x1, y1] = worldProj([region.bbox[2], region.bbox[1]]); // lon max, lat min
+    const regionWidthPx = Math.abs(x1 - x0);
+    const regionHeightPx = Math.abs(y1 - y0);
+    const k = Math.min(width / regionWidthPx, height / regionHeightPx);
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const transform = `translate(${width / 2},${height / 2}) scale(${k}) translate(${-cx},${-cy})`;
+    // Wait briefly before starting the zoom animation so the player can
+    // recognise the whole world
+    // Show the full world for a brief moment so the player can orient
+    await new Promise(res => setTimeout(res, 1000));
+    // Animate the zoom into the region using a D3 transition on the <g> group.
+    // Use a cubic easing for a smooth in‑out effect.  A longer duration
+    // emphasises the cinematic feel.
+    const svgSel = d3.select(regionMapEl).select('svg');
+    const gSel = svgSel.select('g');
+    gSel.transition().duration(1800).ease(d3.easeCubicInOut).attr('transform', transform);
+    // After the zoom animation completes, draw the region map and flags
+    setTimeout(() => {
+      // Store the features globally for later use
+      regionFeatures = features;
+      drawRegionMap(features);
+      buildRegionFlags(features);
+    }, 1850);
+    // Update the instructions for region snapshot
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Region Snapshot:</b> A random part of the world will be zoomed in on. Drag each flag onto the country you think it belongs to. Correct placements turn the country green; incorrect ones blink red and the flag returns to the bottom. Continue until all flags are placed.';
+    }
+    // Update mode display
+    if (modeDisplay && modeNames[state.mode]) {
+      modeDisplay.innerHTML = modeNames[state.mode];
+    }
+  }
+
+  /**
+   * Build a new region round.  Chooses a random region, filters the
+   * world features to those whose centroids fall within the region
+   * bounding box, draws the map and generates draggable flags for the
+   * countries in that region.  If fewer than two countries are found,
+   * another region is tried (up to 10 attempts).
+   */
+  function buildRegion() {
+    let region = randomRegion();
+    let attempts = 10;
+    regionFeatures = [];
+    while (attempts > 0) {
+      // Include countries whose bounding boxes intersect the selected region
+      regionFeatures = worldData.filter(f => featureIntersectsBbox(f, region.bbox));
+      if (regionFeatures.length >= 3) break;
+      region = randomRegion();
+      attempts--;
+    }
+    if (regionFeatures.length < 3) {
+      // Fallback: use the first few features if no region matches.  Use
+      // four countries to ensure multiple flags are present.
+      regionFeatures = worldData.slice(0, 4);
+    }
+    drawRegionMap(regionFeatures);
+    buildRegionFlags(regionFeatures);
+  }
+
+  /**
+   * Draw the map for the current region.  Computes a projection that fits
+   * the selected features into the available SVG area, clears any
+   * previous map and then renders the new features.  Each country
+   * path is set up to accept drops from draggable flags.
+   * @param {Array} features List of GeoJSON features in the region
+   */
+  function drawRegionMap(features) {
+    // Create or select the SVG
+    const svg = d3.select(regionMapEl).selectAll('svg').data([null]);
+    const svgEnter = svg.enter().append('svg');
+    const svgSel = svgEnter.merge(svg);
+    const width = regionMapEl.clientWidth;
+    const height = regionMapEl.clientHeight;
+    svgSel.attr('width', width).attr('height', height);
+    // Compute a projection that fits the features
+    regionProjection = d3.geoMercator();
+    regionPath = d3.geoPath(regionProjection);
+    regionProjection.fitSize([width, height], { type: 'FeatureCollection', features });
+    // Remove any existing groups and render new ones
+    svgSel.selectAll('g').remove();
+    const g = svgSel.append('g');
+    g.selectAll('path')
+      .data(features)
+      .enter().append('path')
+      .attr('class', 'country')
+      .attr('d', regionPath)
+      .each(function(d) {
+        // Store the feature on the DOM element for later reference
+        this.__featureData = d;
+      })
+      // Allow dropping a flag onto the country.  Prevent the default
+      // behaviour to enable drops and call our handler on drop.
+      .on('dragover', (event, d) => {
+        event.preventDefault();
+      })
+      .on('drop', function(event, d) {
+        event.preventDefault();
+        handleRegionDrop(event, d, this);
+      })
+      // When the pointer enters a country (hovering), apply the hover
+      // style to highlight it.  Remove the highlight on exit.
+      .on('mouseenter', function() {
+        d3.select(this).classed('hover', true);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).classed('hover', false);
+      })
+      // During dragging we use dragenter/dragleave to highlight the
+      // country under the current drag target because mouseenter/mouseleave
+      // events do not fire while holding a dragged element.  When a
+      // draggable flag enters the path, apply hover; when it leaves,
+      // remove the hover class.
+      .on('dragenter', function(event) {
+        event.preventDefault();
+        d3.select(this).classed('hover', true);
+      })
+      .on('dragleave', function(event) {
+        d3.select(this).classed('hover', false);
+      });
+
+    // Set up zoom and pan behaviour on the map.  Allow the user to
+    // zoom in to inspect small countries and pan within the map
+    // container.  Reset any existing zoom handler before applying a
+    // new one to avoid multiple bindings.
+    svgSel.on('.zoom', null);
+    const zoom = d3.zoom()
+      // Restrict zoom scale: minimum of 1 (fit size) and maximum of 10x
+      .scaleExtent([1, 10])
+      // Limit panning to within the SVG's bounding box
+      .translateExtent([[0, 0], [width, height]])
+      .extent([[0, 0], [width, height]])
+      .on('zoom', (event) => {
+        // Update the transform on the group and save the zoom transform
+        // so it can be used to correctly position flags when snapped
+        g.attr('transform', event.transform);
+        // Save the current transform and update positions of snapped flags
+        regionZoomTransform = event.transform;
+        updateSnappedFlags();
+      });
+    svgSel.call(zoom);
+  }
+
+  /**
+   * Generate draggable flag elements for each country in the region.  Uses
+   * the dataUN list to find the corresponding ISO 2 code and flag image.
+   * Flags are appended to the regionFlags container and assigned drag
+   * handlers.  If no matching ISO2 code is found, the flag is skipped.
+   * @param {Array} features List of GeoJSON features representing countries
+   */
+  function buildRegionFlags(features) {
+    regionFlags.innerHTML = '';
+    regionFlagsData = [];
+    features.forEach(feature => {
+      // Determine the common name for the feature and normalise it
+      const rawName = feature.properties && feature.properties.name ? feature.properties.name : '';
+      const mappedName = COMMON[rawName] || rawName;
+      const normalized = norm(mappedName);
+      // Look up the entry in the UN dataset by matching the normalised
+      // name or any of its alternate names (including nicknames and
+      // acronyms).  This allows us to match cases where the GeoJSON
+      // uses shortened names such as "Dominican Rep." or "Congo".
+      let entry = null;
+      for (const e of dataUN) {
+        if (norm(e.name) === normalized) {
+          entry = e;
+          break;
+        }
+        if (e.alt && e.alt.some(a => norm(a) === normalized)) {
+          entry = e;
+          break;
+        }
+      }
+      if (!entry) return;
+      const iso2 = entry.cca2;
+      const name = entry.name;
+      const flagCard = document.createElement('div');
+      flagCard.className = 'flag-draggable';
+      flagCard.setAttribute('draggable', 'true');
+      flagCard.dataset.iso2 = iso2;
+      flagCard.dataset.iso3 = feature.id;
+      flagCard.dataset.name = name;
+      const img = document.createElement('img');
+      // Use a smaller size to keep flags compact
+      img.src = `https://flagcdn.com/96x72/${iso2.toLowerCase()}.png`;
+      img.alt = name + ' flag';
+      flagCard.appendChild(img);
+      // Add a label showing the country's name.  The label is hidden
+      // by default and toggled by the region name setting.
+      const label = document.createElement('div');
+      label.className = 'flag-name';
+      label.textContent = name;
+      flagCard.appendChild(label);
+      regionFlags.appendChild(flagCard);
+      regionFlagsData.push({ iso2: iso2, iso3: feature.id, element: flagCard });
+      // Attach drag handlers
+      flagCard.addEventListener('dragstart', onRegionDragStart);
+      flagCard.addEventListener('dragend', onRegionDragEnd);
+    });
+    // Update name visibility based on the current setting
+    updateRegionNameDisplay();
+  }
+
+  /**
+   * Handler for starting a drag on a flag in the region mode.  Records the
+   * currently dragged element and reduces its opacity for visual feedback.
+   */
+  function onRegionDragStart(e) {
+    regionDragging = this;
+    this.classList.add('dragging');
+    // Set the drag data to the ISO3 code so we can compare on drop
+    e.dataTransfer.setData('text/plain', this.dataset.iso3);
+  }
+
+  /**
+   * Handler for ending a drag.  Removes the dragging visual state.
+   */
+  function onRegionDragEnd(e) {
+    if (regionDragging) {
+      regionDragging.classList.remove('dragging');
+      regionDragging = null;
+    }
+  }
+
+  /**
+   * Handle dropping a flag onto a country.  Compares the ISO3 of the
+   * dragged flag with the ISO3 of the target feature.  If correct, the
+   * flag is snapped to the centroid of the country and removed from
+   * the bottom row; the country path is coloured green.  If incorrect,
+   * the country blinks red and the flag remains at the bottom.  When
+   * all flags are placed, a completion message and reset button are
+   * displayed.
+   * @param {Event} event The drop event
+   * @param {Object} feature The GeoJSON feature for the drop target
+   * @param {SVGPathElement} pathEl The SVG path element representing the country
+   */
+  function handleRegionDrop(event, feature, pathEl) {
+    if (!regionDragging) return;
+    const draggedIso3 = regionDragging.dataset.iso3;
+    const targetIso3 = feature.id;
+    if (draggedIso3 === targetIso3) {
+      // Correct placement
+      d3.select(pathEl).classed('correct', true).classed('incorrect', false);
+      // Snap the flag to the country's centroid.  Scale the flag down when
+      // placed on the map so that it does not overwhelm the region.  Use
+      // fixed dimensions (64×48) instead of the original 96×72.
+      // Compute the centroid of the country in map projection
+      let [cx, cy] = regionPath.centroid(feature);
+      // Apply the current zoom transform so that snapped flags align
+      // correctly with the zoomed/panned map.  If no transform has
+      // been recorded yet, regionZoomTransform will default to the
+      // identity transform.  applyX/applyY convert from map
+      // coordinates to screen coordinates under the current zoom.
+      if (regionZoomTransform && typeof regionZoomTransform.applyX === 'function') {
+        cx = regionZoomTransform.applyX(cx);
+        cy = regionZoomTransform.applyY(cy);
+      }
+      // Use a smaller flag size when placed on the map so it does not
+      // overwhelm the country.  Flags maintain a 3:2 aspect ratio.
+      const newW = 40;
+      const newH = 28;
+      regionDragging.style.position = 'absolute';
+      regionDragging.style.zIndex = 50;
+      regionDragging.style.width = newW + 'px';
+      regionDragging.style.height = newH + 'px';
+      regionDragging.style.left = `${cx - newW / 2}px`;
+      regionDragging.style.top = `${cy - newH / 2}px`;
+      // Move the element into the map container so it sits on top of the country
+      regionMapEl.appendChild(regionDragging);
+      // Hide the name label on snapped flags.  Names are only shown in the
+      // bottom flag bar, not on the map itself.  We remove the label or
+      // force it to be hidden to avoid cluttering the map.
+      const nameEl = regionDragging.querySelector('.flag-name');
+      if (nameEl) {
+        nameEl.style.display = 'none';
+      }
+      // Disable further dragging
+      regionDragging.removeEventListener('dragstart', onRegionDragStart);
+      regionDragging.removeEventListener('dragend', onRegionDragEnd);
+      regionDragging.classList.remove('dragging');
+      regionDragging.draggable = false;
+      regionDragging = null;
+      // Add the placed flag to the snapped flags list so it can be
+      // repositioned and resized on subsequent zoom events
+      snappedFlags.push({ el: regionMapEl.lastChild, feature: feature });
+      // Update positions of all snapped flags to account for current zoom
+      updateSnappedFlags();
+      // Check if all flags have been placed
+      const remaining = Array.from(regionFlags.children).filter(el => el.draggable);
+      if (remaining.length === 0) {
+        regionStatus.innerHTML = '<span style="color:var(--ok); font-weight:bold;">🎉 Region complete!</span>';
+        regionResetBtn.classList.remove('hidden');
+      }
+    } else {
+      // Incorrect placement: briefly flash the country red
+      const sel = d3.select(pathEl);
+      sel.classed('incorrect', true);
+      setTimeout(() => {
+        sel.classed('incorrect', false);
+      }, 800);
+      // The flag remains in the bottom row; nothing else to do
+    }
+  }
+
   // ----------------- Data (UN + Territories) -----------------
   const COMMON = {"United Kingdom of Great Britain and Northern Ireland":"United Kingdom","United States of America":"United States","Korea (Republic of)":"South Korea","Korea (Democratic People's Republic of)":"North Korea","Côte d’Ivoire":"Cote d'Ivoire","Viet Nam":"Vietnam","Syrian Arab Republic":"Syria","Iran (Islamic Republic of)":"Iran","Russian Federation":"Russia","Lao People's Democratic Republic":"Laos","Venezuela (Bolivarian Republic of)":"Venezuela","Tanzania, United Republic of":"Tanzania","Türkiye":"Turkey","Timor-Leste":"East Timor"};
   const NICK = {"United States":["USA","US","U.S.","U.S.A","America","United States of America"],"United Kingdom":["UK","Britain","Great Britain"],"Russia":["Russian Federation"],"South Korea":["Korea, South","Republic of Korea","ROK"],"North Korea":["Korea, North","Democratic People's Republic of Korea","DPRK"],"Cote d'Ivoire":["Ivory Coast"],"Czech Republic":["Czechia"],"Myanmar":["Burma"],"Turkey":["Türkiye"],"East Timor":["Timor-Leste"],"Laos":["Lao PDR","Lao People's Democratic Republic"],"Syria":["Syrian Arab Republic"],"Vietnam":["Viet Nam"],"Taiwan":["Republic of China","ROC"],"Palestine":["State of Palestine","Palestine, State of"],"Moldova":["Republic of Moldova"],"Micronesia":["Micronesia (Federated States of)","FSM"],"North Macedonia":["Macedonia"],"DR Congo":["Democratic Republic of the Congo","Congo (DRC)","Congo-Kinshasa","Congo, Democratic Republic of the"],"Republic of the Congo":["Congo-Brazzaville","Congo"]};
@@ -995,6 +1898,12 @@
     userPresets: [],
     // Maximum mistakes allowed in connections mode (when unlimited mistakes is disabled)
     maxMistakes: 4,
+    // Odd One Out specific settings
+    oddMaxMistakes: 2,      // maximum mistakes allowed in odd mode (unless unlimited)
+    oddMistakesUsed: 0,     // mistakes used in the current odd round
+    oddUnlimitedMistakes: false, // whether unlimited mistakes is enabled for odd mode
+    // Region Snapshot specific settings
+    regionShowNames: false, // show country names under each draggable flag if true
     // Number of mistakes made so far in the current connections round
     connectionsMistakesUsed: 0,
     // Whether unlimited mistakes are enabled in Flag Connections
@@ -1159,8 +2068,12 @@
     state.quizPool = shuffle(getSource().slice());
     // Hide draw header when leaving draw mode
     drawHeader.classList.add('hidden');
+    // Hide region and connections panels when entering classic mode
+    regionPanel.classList.add('hidden');
     // Hide connections panel when entering classic mode
     connectionsPanel.classList.add('hidden');
+    // Hide odd one out panel when entering classic mode
+    oddPanel.classList.add('hidden');
     // Show result area and canvas for standard play
     resultEl.classList.remove('hidden');
     canvas.classList.remove('hidden');
@@ -1182,6 +2095,10 @@
     state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending));
     // Update the mode display
     if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
+    // Update the instructions for classic mode
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Classic Mode:</b> Guess the name of the country based on its flag. Type your answer and click <b>Submit</b>, or click <b>Reveal</b> to show the correct answer. Use <b>Next</b> to move on to the next flag.';
+    }
     nextFlag();
   }
 
@@ -1283,8 +2200,12 @@
     submitBtn.disabled = false;
     // Hide the draw header in endless mode
     drawHeader.classList.add('hidden');
+    // Hide region panel when entering endless mode
+    regionPanel.classList.add('hidden');
     // Hide connections panel when entering endless mode
     connectionsPanel.classList.add('hidden');
+    // Hide odd one out panel when entering endless mode
+    oddPanel.classList.add('hidden');
     // Ensure the canvas and result elements are visible
     canvas.classList.remove('hidden');
     resultEl.classList.remove('hidden');
@@ -1303,6 +2224,10 @@
     // Start by drawing the first flag via nextFlag (randomization happens there)
     // Update mode display
     if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
+    // Update instructions for Endless Hardcore mode
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Endless Hardcore:</b> Guess each flag under random visual effects (blur, pixelation, colour shifts, etc.). Effects change with every flag. There are no hints or learning aids.';
+    }
     nextFlag();
   }
 
@@ -1320,8 +2245,12 @@
     // Hide the answer input field but keep the submit button visible, and show drawing controls
     answer.classList.add('hidden');
     drawControls.classList.remove('hidden');
+    // Hide region panel when entering draw mode
+    regionPanel.classList.add('hidden');
     // Hide connections panel when entering draw mode
     connectionsPanel.classList.add('hidden');
+    // Hide odd one out panel when entering draw mode
+    oddPanel.classList.add('hidden');
     // Ensure canvas and result area are visible
     canvas.classList.remove('hidden');
     resultEl.classList.remove('hidden');
@@ -1345,6 +2274,10 @@
     drawHeader.classList.remove('hidden');
     // Update mode display
     if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
+    // Update the instructions for draw mode
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Draw The Flag:</b> You\'ll be shown a country name. Use the drawing tools to sketch its flag from memory. Pick colours from the palette or use the eyedropper, then click <b>Submit</b> to see how close you are.';
+    }
     // Start with a new flag to draw
     nextDraw();
 
@@ -1606,6 +2539,120 @@
   async function ensureConnectionsThemes() {
     buildSimpleConnectionsThemes();
     await buildColorConnectionsThemes();
+    // Build additional connection themes (languages, population, area, tricolour, weapons, crosses)
+    buildExtraConnectionsThemes();
+  }
+
+  /**
+   * Build additional themed categories beyond the basic continent/letter/colour patterns.  These
+   * groups include language families, population and land area extremes, tricolour flags,
+   * flags featuring weapons, and flags with crosses.  Each category must contain at least
+   * four UN member countries and is tagged with a unique type to avoid duplicate types
+   * appearing within the same round.
+   */
+  let extraThemesBuilt = false;
+  function buildExtraConnectionsThemes() {
+    if (extraThemesBuilt) return;
+    extraThemesBuilt = true;
+    // Helper to resolve a list of country names into data entries
+    function entriesFromNames(names) {
+      return names.map(n => dataUN.find(e => e.name === n)).filter(Boolean);
+    }
+    // ----- Language categories -----
+    const langGroups = {
+      'English': [
+        'United Kingdom','Ireland','United States','Canada','Australia','New Zealand','South Africa','Nigeria','Kenya','Uganda','Ghana','Jamaica','Trinidad and Tobago'
+      ],
+      'French': [
+        'France','Belgium','Canada','Haiti','Senegal','Cote d\'Ivoire','Madagascar','DR Congo','Cameroon','Guinea','Niger','Mali','Burkina Faso','Togo'
+      ],
+      'Spanish': [
+        'Spain','Mexico','Argentina','Chile','Colombia','Peru','Venezuela','Ecuador','Bolivia','Uruguay','Paraguay','Cuba','Dominican Republic','Costa Rica','Honduras'
+      ],
+      'Portuguese': [
+        'Portugal','Brazil','Angola','Mozambique','Guinea-Bissau','Cabo Verde','Sao Tome and Principe','East Timor'
+      ],
+      'Arabic': [
+        'Saudi Arabia','Algeria','Egypt','Iraq','Jordan','Kuwait','Lebanon','Libya','Mauritania','Morocco','Oman','Qatar','Syria','Tunisia','United Arab Emirates','Yemen','Sudan','Somalia','Djibouti'
+      ]
+    };
+    Object.entries(langGroups).forEach(([lang,names]) => {
+      const flags = entriesFromNames(names);
+      if (flags.length >= 4) {
+        connectionsThemes.push({ name: `Countries speaking ${lang}`, flags, type: 'language' });
+      }
+    });
+    // ----- Population extremes -----
+    const sortedByPop = dataUN.slice().sort((a,b) => b.pop - a.pop);
+    const popTop30 = sortedByPop.slice(0,30);
+    const popBottom30 = sortedByPop.slice(-30);
+    if (popTop30.length >= 4) connectionsThemes.push({ name: 'Top 30 by population', flags: popTop30, type: 'population' });
+    if (popBottom30.length >= 4) connectionsThemes.push({ name: 'Bottom 30 by population', flags: popBottom30, type: 'population' });
+    // ----- Land area extremes -----
+    // Define approximate top 30 largest countries by land area (UN member names)
+    const areaTopNames = [
+      'Russia','Canada','United States','China','Brazil','Australia','India','Argentina','Kazakhstan','Algeria','DR Congo','Saudi Arabia','Mexico','Indonesia','Sudan','Libya','Iran','Mongolia','Peru','Chad','Niger','Angola','Mali','South Africa','Colombia','Ethiopia','Bolivia','Mauritania','Egypt','Tanzania'
+    ];
+    const areaBottomNames = [
+      'Monaco','Nauru','Tuvalu','San Marino','Liechtenstein','Malta','Maldives','Saint Kitts and Nevis','Grenada','Seychelles','Bahrain','Barbados','Antigua and Barbuda','Saint Vincent and the Grenadines','Kiribati','Micronesia (Federated States of)','Marshall Islands','Sao Tome and Principe','Comoros','Cape Verde','Mauritius','Dominica','Andorra','Singapore','Luxembourg','Qatar','Brunei Darussalam','Samoa','Bahamas','Trinidad and Tobago'
+    ];
+    const areaTop = entriesFromNames(areaTopNames);
+    const areaBottom = entriesFromNames(areaBottomNames);
+    if (areaTop.length >= 4) connectionsThemes.push({ name: 'Top 30 by land area', flags: areaTop, type: 'area' });
+    if (areaBottom.length >= 4) connectionsThemes.push({ name: 'Bottom 30 by land area', flags: areaBottom, type: 'area' });
+    // ----- Tricolour flags -----
+    const tricolourNames = [
+      // Vertical tricolours
+      'France','Italy','Belgium','Ireland','Romania','Chad','Mali','Guinea','Cote d\'Ivoire','Senegal','Cameroon','Bulgaria','Armenia','Lithuania','Mexico','Guyana','Bolivia',
+      // Horizontal tricolours
+      'Netherlands','Luxembourg','Germany','Russia','Estonia','Lithuania','Hungary','Bulgaria','Armenia','Sierra Leone','Gambia','Ghana','Ethiopia'
+    ];
+    const tricolourFlags = entriesFromNames(tricolourNames);
+    if (tricolourFlags.length >= 4) connectionsThemes.push({ name: 'Tricolour flags', flags: tricolourFlags, type: 'tricolour' });
+    // ----- Flags with weapons -----
+    const weaponNames = [
+      'Saudi Arabia','Oman','Mozambique','Guatemala','Sri Lanka','Kenya','Angola','Zimbabwe'
+    ];
+    const weaponFlags = entriesFromNames(weaponNames);
+    if (weaponFlags.length >= 4) connectionsThemes.push({ name: 'Flags with weapons', flags: weaponFlags, type: 'weapon' });
+    // ----- Flags with crosses -----
+    const crossNames = [
+      'Switzerland','United Kingdom','Denmark','Sweden','Norway','Finland','Iceland','Greece','Dominican Republic','Tonga','Georgia'
+    ];
+    const crossFlags = entriesFromNames(crossNames);
+    if (crossFlags.length >= 4) connectionsThemes.push({ name: 'Flags with crosses', flags: crossFlags, type: 'cross' });
+
+    // ----- Flags with animals -----
+    // Countries whose flags prominently feature animals such as birds, eagles or mythological creatures.
+    const animalNames = [
+      'Albania','Mexico','Moldova','Montenegro','Serbia','Zambia','Papua New Guinea','Zimbabwe','Uganda','Ecuador','Bolivia','Kazakhstan','Bhutan','Fiji','Belize','Samoa','Sri Lanka'
+    ];
+    const animalFlags = entriesFromNames(animalNames);
+    if (animalFlags.length >= 4) connectionsThemes.push({ name: 'Flags with animals', flags: animalFlags, type: 'animal' });
+
+    // ----- Flags with crescents -----
+    // Countries whose flags contain a crescent (often associated with Islamic nations).
+    const crescentNames = [
+      'Turkey','Pakistan','Tunisia','Algeria','Mauritania','Azerbaijan','Turkmenistan','Malaysia','Maldives','Libya','Comoros'
+    ];
+    const crescentFlags = entriesFromNames(crescentNames);
+    if (crescentFlags.length >= 4) connectionsThemes.push({ name: 'Flags with crescents', flags: crescentFlags, type: 'crescent' });
+
+    // ----- Flags with coat of arms -----
+    // Countries whose national flags display a coat of arms or elaborate shield at the centre or off-centre.
+    const coatNames = [
+      'Spain','Portugal','Andorra','Moldova','Montenegro','Croatia','Serbia','Slovakia','Slovenia','San Marino','Ecuador','Panama','Mexico','Bolivia','Guatemala','Paraguay'
+    ];
+    const coatFlags = entriesFromNames(coatNames);
+    if (coatFlags.length >= 4) connectionsThemes.push({ name: 'Flags with coat of arms', flags: coatFlags, type: 'coat' });
+
+    // ----- Flags with suns -----
+    // Countries whose flags contain a sun, sunburst or rays motif.
+    const sunNames = [
+      'Argentina','Uruguay','Kazakhstan','Philippines','Rwanda','Namibia','Malawi','Kyrgyzstan','Myanmar','Taiwan','Japan','Bangladesh','North Macedonia'
+    ];
+    const sunFlags = entriesFromNames(sunNames);
+    if (sunFlags.length >= 4) connectionsThemes.push({ name: 'Flags with suns', flags: sunFlags, type: 'sun' });
   }
 
   // ----- Flag Connections Game Implementation -----
@@ -1615,6 +2662,289 @@
   let connectionsGridData = [];
   let connectionsSelected = [];
   let connectionsSolved = [];
+
+  // ----- Odd One Out Game Implementation -----
+  // Data for the current round of the odd one out game. Each round consists of
+  // four cards: three from one theme and one random intruder flag. The data
+  // structures here are reset whenever a new round begins.
+  let oddGridData = [];
+  // Currently selected card element in the odd one out game (null if none)
+  let oddSelected = null;
+
+  /**
+   * Start the Odd One Out mode. This function hides any UI from other game
+   * modes, resets the score counters, ensures that the connections theme
+   * categories are available, and sets up the first round of odd one out.
+   */
+  async function startOdd() {
+    // Set mode and reset score counters
+    state.mode = 'odd';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = 0;
+    streakEl.textContent = 0;
+    // Reset mistake counters for odd mode and read unlimited setting
+    state.oddMistakesUsed = 0;
+    state.oddUnlimitedMistakes = unlimitedOddMistakesToggle && unlimitedOddMistakesToggle.checked;
+    // Hide panels and controls from other modes
+    // Hide region panel when entering odd mode
+    regionPanel.classList.add('hidden');
+    drawHeader.classList.add('hidden');
+    drawControls.classList.add('hidden');
+    connectionsPanel.classList.add('hidden');
+    canvas.classList.add('hidden');
+    resultEl.classList.add('hidden');
+    resultEl.innerHTML = '';
+    answer.classList.add('hidden');
+    answer.disabled = true;
+    submitBtn.classList.add('hidden');
+    submitBtn.disabled = true;
+    revealBtn.classList.add('hidden');
+    nextBtn.classList.add('hidden');
+    revealBtn.disabled = true;
+    nextBtn.disabled = true;
+    learnPanel.classList.add('hidden');
+    // Hide mistakes UI from connections mode
+    mistakesRow.classList.add('hidden');
+    mistakesPill.classList.add('hidden');
+    // Show odd panel
+    oddPanel.classList.remove('hidden');
+    // Hide and reset odd-specific elements
+    if (oddNext) { oddNext.classList.add('hidden'); oddNext.disabled = false; }
+    oddStatus.textContent = '';
+    oddSubmit.disabled = true;
+    oddGrid.innerHTML = '';
+    // Ensure the odd grid click handler is attached fresh for each new game.  Remove any previous handler and reattach it.
+    oddGrid.removeEventListener('click', onOddCardClick);
+    oddGrid.addEventListener('click', onOddCardClick);
+    // Update the odd instructions and global instructions
+    if (oddInstructionsEl) {
+      oddInstructionsEl.innerHTML = '';
+    }
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Odd One Out:</b> Three of the four flags share a category; one does not. Select the flag that doesn\'t belong. You have <b>2</b> mistakes by default. Enable the unlimited setting to keep playing as long as you like.' +
+        '<br><br><b>Possible category types:</b>' +
+        '<ul>' +
+        '<li><b>By First Letter</b>: Countries starting with the same letter</li>' +
+        '<li><b>By Last Letter</b>: Countries ending with the same letter</li>' +
+        '<li><b>By Name Length</b>: Countries whose names have the same number of letters</li>' +
+        '<li><b>By Continent or Region</b>: Countries from the same continent or subregion</li>' +
+        '<li><b>By Colour</b>: Flags that contain a common colour (red, green, blue, etc.)</li>' +
+        '<li><b>By Tricolour</b>: Flags with three equal stripes</li>' +
+        '<li><b>Flags with Weapons</b>: Flags featuring swords, rifles or other weapons</li>' +
+        '<li><b>Flags with Crosses</b>: Flags featuring crosses or cross patterns</li>' +
+        '<li><b>Flags with Animals</b>: Flags displaying animals, birds or mythical creatures</li>' +
+        '<li><b>Flags with Crescents</b>: Flags containing crescent shapes</li>' +
+        '<li><b>Flags with Coat of Arms</b>: Flags bearing coats of arms or shields</li>' +
+        '<li><b>Flags with Suns</b>: Flags featuring sun emblems or rays</li>' +
+        '<li><b>By Language</b>: Countries sharing an official language (English, French, Spanish, etc.)</li>' +
+        '<li><b>By Population Size</b>: Top 30 or bottom 30 countries by population</li>' +
+        '<li><b>By Land Area</b>: Top 30 or bottom 30 countries by land area</li>' +
+        '<li><b>By Keyword</b>: Names containing a common word (Islands, Republic, New, Guinea, Stan, etc.)</li>' +
+        '</ul>';
+    }
+    // Build themes if necessary
+    await ensureConnectionsThemes();
+    // Update mistakes display (shows circles or pill) now that state is initialised
+    updateOddMistakesDisplay();
+    // Start first round
+    buildOddRound();
+    // Update mode display
+    if (modeDisplay && modeNames[state.mode]) {
+      modeDisplay.innerHTML = modeNames[state.mode];
+    }
+  }
+
+  /**
+   * Build a new round for the odd one out game. Randomly selects a theme from
+   * the available connections themes and chooses three flags from that theme.
+   * Then picks one additional random flag from the UN pool that is not part
+   * of the selected theme. These four flags are shuffled and rendered into
+   * the odd one out grid. The odd flag is marked via a data attribute for
+   * later evaluation.
+   */
+  function buildOddRound() {
+    oddGridData = [];
+    oddSelected = null;
+    // Hide the next button and reset its disabled state
+    if (oddNext) {
+      oddNext.classList.add('hidden');
+      oddNext.disabled = false;
+    }
+    oddGrid.innerHTML = '';
+    oddSubmit.disabled = true;
+    oddStatus.textContent = '';
+    // Filter themes with at least three flags
+    const validThemes = connectionsThemes.filter(t => Array.isArray(t.flags) && t.flags.length >= 3);
+    if (validThemes.length === 0) {
+      oddStatus.innerHTML = '<span class="bad">Not enough themes for odd one out.</span>';
+      return;
+    }
+    const theme = validThemes[Math.floor(Math.random() * validThemes.length)];
+    const pool = shuffle(theme.flags.slice());
+    const chosen = [];
+    const usedNames = new Set();
+    for (const e of pool) {
+      if (!usedNames.has(e.name)) {
+        chosen.push(e);
+        usedNames.add(e.name);
+      }
+      if (chosen.length >= 3) break;
+    }
+    // Flags outside theme
+    const outsiders = dataUN.filter(e => !theme.flags.some(f => f.name === e.name));
+    if (outsiders.length === 0) {
+      oddStatus.innerHTML = '<span class="bad">Cannot find odd flag.</span>';
+      return;
+    }
+    const oddEntry = outsiders[Math.floor(Math.random() * outsiders.length)];
+    const items = chosen.map(e => ({ entry: e, odd: false, theme: theme.name }));
+    items.push({ entry: oddEntry, odd: true, theme: theme.name });
+    shuffle(items);
+    oddGridData = items;
+    items.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'flag-card';
+      card.dataset.idx = idx;
+      card.dataset.odd = item.odd ? 'true' : 'false';
+      card.dataset.theme = item.theme;
+      const img = document.createElement('img');
+      img.src = item.entry.flag;
+      img.alt = item.entry.name;
+      img.loading = 'lazy';
+      card.appendChild(img);
+      oddGrid.appendChild(card);
+    });
+  }
+
+  /**
+   * Handler for selecting a flag in the odd one out game. Only one card
+   * can be selected at a time. Clicking the same card again will deselect it.
+   */
+  function onOddCardClick(e) {
+    const card = e.target.closest('.flag-card');
+    if (!card) return;
+    if (oddSelected === card) {
+      card.classList.remove('selected');
+      oddSelected = null;
+      oddSubmit.disabled = true;
+      return;
+    }
+    if (oddSelected) {
+      oddSelected.classList.remove('selected');
+    }
+    card.classList.add('selected');
+    oddSelected = card;
+    oddSubmit.disabled = false;
+  }
+
+  /**
+   * Evaluate the selected card in the odd one out game. If the selection
+   * matches the intruder flag (dataset.odd === 'true'), increment correct
+   * and streak counters. Otherwise, reset the streak. After evaluation,
+   * highlight the odd flag and then build a new round after a short delay.
+   */
+  function submitOdd() {
+    if (!oddSelected) return;
+    // Determine if the selected card is the intruder
+    const isOdd = oddSelected.dataset.odd === 'true';
+    // Find the true odd entry and its details
+    const oddItem = oddGridData.find(item => item.odd);
+    const category = oddItem ? oddItem.theme : '';
+    const oddName = oddItem && oddItem.entry ? oddItem.entry.name : '';
+
+    // Case: correct selection
+    if (isOdd) {
+      // Increase score and streak
+      state.ok++;
+      state.streak++;
+      // Update scoreboard
+      okEl.textContent = state.ok;
+      streakEl.textContent = state.streak;
+      // Highlight the odd flag and clear others
+      oddGrid.querySelectorAll('.flag-card').forEach(card => {
+        card.classList.remove('selected');
+        card.style.outline = '';
+        if (card.dataset.odd === 'true') {
+          card.style.outline = '3px solid var(--bad)';
+        }
+      });
+      // Build and display message with category and odd name
+      let message = `<span style="color:var(--ok)">✔️ Correct!</span>`;
+      if (category) message += ` Category: <b>${category}</b>.`;
+      if (oddName) message += ` Odd one out: <b style="color:var(--bad)">${oddName}</b>`;
+      oddStatus.innerHTML = message;
+      // Disable selection until next round
+      oddGrid.removeEventListener('click', onOddCardClick);
+      oddSubmit.disabled = true;
+      // Show the next button
+      if (oddNext) oddNext.classList.remove('hidden');
+      return;
+    }
+
+    // Case: incorrect selection
+    // Reset streak and increment mistakes used
+    state.streak = 0;
+    state.oddMistakesUsed++;
+    // Update scoreboard
+    okEl.textContent = state.ok;
+    streakEl.textContent = state.streak;
+    // Update mistakes display
+    updateOddMistakesDisplay();
+    // Determine if the player still has attempts left (either unlimited, or mistakes used < max)
+    const attemptsLeft = state.oddUnlimitedMistakes || state.oddMistakesUsed < state.oddMaxMistakes;
+    if (attemptsLeft) {
+      // There are still chances remaining: allow another guess on the same puzzle.
+      // Highlight the wrongly selected card in red, but do not reveal the odd one
+      oddGrid.querySelectorAll('.flag-card').forEach(card => {
+        card.classList.remove('selected');
+        // Reset outline for all cards first
+        if (!state.oddUnlimitedMistakes && state.oddMistakesUsed <= state.oddMaxMistakes) {
+          // do nothing special here; we'll highlight the wrong selection below
+        }
+        card.style.outline = '';
+      });
+      // Highlight the chosen wrong card
+      oddSelected.style.outline = '3px solid var(--bad)';
+      // Clear selection so user must choose again
+      oddSelected.classList.remove('selected');
+      oddSelected = null;
+      // Display message prompting the user to try again (without giving away the answer)
+      oddStatus.innerHTML = `<span style="color:var(--bad)">✖️ Incorrect! Try again.</span>`;
+      // Disable submit until a new selection is made
+      oddSubmit.disabled = true;
+      // Keep the click listener so the user can select again
+      return;
+    }
+    // No attempts left: reveal the correct answer and end the round
+    // Highlight the true odd card and also the wrong guess
+    oddGrid.querySelectorAll('.flag-card').forEach(card => {
+      card.classList.remove('selected');
+      card.style.outline = '';
+      if (card.dataset.odd === 'true') {
+        card.style.outline = '3px solid var(--bad)';
+      }
+      // Also highlight the last wrong selection
+      if (card === oddSelected) {
+        card.style.outline = '3px solid var(--bad)';
+      }
+    });
+    // Build message: incorrect and reveal category and odd
+    let msg = `<span style="color:var(--bad)">✖️ Incorrect!</span>`;
+    if (category) msg += ` Category: <b>${category}</b>.`;
+    if (oddName) msg += ` Odd one out: <b style="color:var(--bad)">${oddName}</b>`;
+    // Show game over message
+    msg += ` <span class="bad">No mistakes remaining. Press <b>Next</b> to play again.</span>`;
+    oddStatus.innerHTML = msg;
+    // Disable grid interaction and submit button
+    oddGrid.removeEventListener('click', onOddCardClick);
+    oddSubmit.disabled = true;
+    // Show and enable the next button so the user can continue
+    if (oddNext) {
+      oddNext.classList.remove('hidden');
+      oddNext.disabled = false;
+    }
+  }
 
   /**
    * Start the Flag Connections mode. This function resets relevant game
@@ -1635,6 +2965,8 @@
     // Update the mistakes display and scoreboard pill accordingly
     updateMistakesDisplay();
     // Hide other panels that are not used in connections mode
+    // Hide region panel when entering connections mode
+    regionPanel.classList.add('hidden');
     // Hide drawing header and controls
     drawHeader.classList.add('hidden');
     drawControls.classList.add('hidden');
@@ -1653,6 +2985,8 @@
     learnPanel.classList.add('hidden');
     // Show the connections panel
     connectionsPanel.classList.remove('hidden');
+    // Hide odd one out panel when entering connections mode
+    oddPanel.classList.add('hidden');
     // Clear any previous solved groups and grid
     connectionsTop.innerHTML = '';
     connectionsGrid.innerHTML = '';
@@ -1669,6 +3003,31 @@
     await ensureConnectionsThemes();
     // Generate a new round
     buildConnectionsRound();
+
+    // Update mode and instructions display
+    if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Flag Connections:</b> Create four groups of four flags that share common themes. Select exactly four flags and click <b>Submit</b> to see if they form a correct group. You have four mistakes by default; enable unlimited mistakes in settings to continue playing.' +
+        '<br><br><b>Possible category types:</b>' +
+        '<ul>' +
+        '<li><b>By First Letter</b>: Countries starting with the same letter</li>' +
+        '<li><b>By Last Letter</b>: Countries ending with the same letter</li>' +
+        '<li><b>By Name Length</b>: Countries whose names have the same number of letters</li>' +
+        '<li><b>By Continent or Region</b>: Countries from the same continent or subregion</li>' +
+        '<li><b>By Colour</b>: Flags that contain a common colour (red, green, blue, etc.)</li>' +
+        '<li><b>By Tricolour</b>: Flags with three equal stripes</li>' +
+        '<li><b>Flags with Weapons</b>: Flags featuring swords, rifles or other weapons</li>' +
+        '<li><b>Flags with Crosses</b>: Flags featuring crosses or cross patterns</li>' +
+        '<li><b>Flags with Animals</b>: Flags displaying animals, birds or mythical creatures</li>' +
+        '<li><b>Flags with Crescents</b>: Flags containing crescent shapes</li>' +
+        '<li><b>Flags with Coat of Arms</b>: Flags bearing coats of arms or shields</li>' +
+        '<li><b>Flags with Suns</b>: Flags featuring sun emblems or rays</li>' +
+        '<li><b>By Language</b>: Countries sharing an official language (English, French, Spanish, etc.)</li>' +
+        '<li><b>By Population Size</b>: Top 30 or bottom 30 countries by population</li>' +
+        '<li><b>By Land Area</b>: Top 30 or bottom 30 countries by land area</li>' +
+        '<li><b>By Keyword</b>: Names containing a common word (Islands, Republic, New, Guinea, Stan, etc.)</li>' +
+        '</ul>';
+    }
   }
 
   /**
@@ -2365,8 +3724,12 @@
     state.mode='memory'; resultEl.textContent='';
     // Hide draw header in memory mode
     drawHeader.classList.add('hidden');
+    // Hide region panel and connections panel when entering memory mode
+    regionPanel.classList.add('hidden');
     // Hide connections panel when entering memory mode
     connectionsPanel.classList.add('hidden');
+    // Hide odd one out panel when entering memory mode
+    oddPanel.classList.add('hidden');
     // Ensure canvas and result area are visible
     canvas.classList.remove('hidden');
     resultEl.classList.remove('hidden');
@@ -2381,6 +3744,10 @@
     learnPanel.classList.remove('hidden');
     // Update mode display
     if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
+    // Update instructions for memory mode
+    if (gameInstructions) {
+      gameInstructions.innerHTML = '<b>Memory Quiz:</b> Memorise the sequence of flags shown, then type them in the correct order. Each flag appears briefly. Use <b>Submit</b> after each guess.';
+    }
     const src=shuffle(getSource().slice()); state.memory.sequence=src.slice(0,5); state.memory.index=0;
     answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true; nextBtn.disabled=true;
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -2459,6 +3826,11 @@
       startDraw();
     } else if (mode === 'connections') {
       startConnections();
+    } else if (mode === 'odd') {
+      startOdd();
+    } else if (mode === 'region') {
+      // Start the region snapshot mode
+      startRegion();
     } else {
       // 'classic' and any unknown value fallback to the classic game mode
       startGame();
@@ -2483,6 +3855,19 @@
     }
   });
   submitBtn.addEventListener('click', submit);
+  // Region snapshot reset button starts a new random region
+  regionResetBtn.addEventListener('click', () => {
+    // Clear status and start a new region round
+    regionStatus.textContent = '';
+    // Remove any flags previously snapped onto the map (both draggable and non-draggable)
+    regionMapEl.querySelectorAll('.flag-draggable').forEach(el => el.remove());
+    // Build a new random region (by calling startRegion again).  This
+    // resets the map, zoom animation and flags.
+    // We call startRegion() here instead of buildRegion() so that
+    // the cinematic zoom is replayed for the new region.
+    startRegion();
+    regionResetBtn.classList.add('hidden');
+  });
   answer.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
   // removed memoryBtn click listener (replaced by mode selector)
 
@@ -2986,6 +4371,47 @@
     deselectConnections();
   });
 
+  // ----- Odd One Out event listeners -----
+  // Handle selection of a flag in the odd one out grid. Only one card can be selected at a time.
+  oddGrid.addEventListener('click', onOddCardClick);
+  // Submit the selected flag for evaluation in odd mode
+  oddSubmit.addEventListener('click', submitOdd);
+
+  // Next button for odd mode: proceed to the next round if mistakes allow
+  if (oddNext) {
+    oddNext.addEventListener('click', () => {
+      // For Odd mode, always allow moving to the next round. Reset mistakes count when not in unlimited mode,
+      // and update the mistakes display so the player starts fresh. In unlimited mode we retain the count.
+      if (!state.oddUnlimitedMistakes) {
+        state.oddMistakesUsed = 0;
+      }
+      updateOddMistakesDisplay();
+      // Clear outlines
+      oddGrid.querySelectorAll('.flag-card').forEach(card => {
+        card.style.outline = '';
+      });
+      oddStatus.textContent = '';
+      oddNext.classList.add('hidden');
+      oddGrid.addEventListener('click', onOddCardClick);
+      buildOddRound();
+    });
+  }
+
+  // Toggle unlimited mistakes for odd mode
+  if (unlimitedOddMistakesToggle) {
+    unlimitedOddMistakesToggle.addEventListener('change', () => {
+      state.oddUnlimitedMistakes = unlimitedOddMistakesToggle.checked;
+      updateOddMistakesDisplay();
+    });
+  }
+
+  // Toggle showing country names for Region Snapshot
+  if (regionNameToggle) {
+    regionNameToggle.addEventListener('change', () => {
+      updateRegionNameDisplay();
+    });
+  }
+
   // ----- Mode Display Updates -----
   // On initial load, show the display name of the default mode (state.mode).
   // The state object is defined later, but we can wait until DOMContentLoaded to ensure it exists.
@@ -3000,6 +4426,13 @@
     const selected = modeSelect.value;
     if (modeNames[selected] && modeDisplay) {
       modeDisplay.innerHTML = modeNames[selected];
+    }
+    // When switching modes via the dropdown, immediately hide the odd one out panel
+    // to prevent leftover puzzles from persisting. Panels for other modes remain
+    // hidden until their respective start functions run. This ensures that
+    // changing the mode resets the UI state.
+    if (selected !== 'odd') {
+      oddPanel.classList.add('hidden');
     }
   });
 
