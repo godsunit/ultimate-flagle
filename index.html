@@ -5,32 +5,208 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ultimate Flagle</title>
   <style>
-    :root{--accent:#93c5fd;--ok:#34d399;--bad:#fb7185;--warn:#fbbf24}
+    :root{
+      --accent:#93c5fd;
+      --ok:#34d399;
+      --bad:#fb7185;
+      --warn:#fbbf24;
+      /* Connections grid gap and card radius for consistent spacing. Default values emulate the
+         comfortable spacing of our inspiration design. Users can adjust these via the UI panel. */
+      --conn-gap:8px;
+      --card-radius:6px;
+      /* Control the speed of solved connections animations (seconds) */
+      --conn-anim-speed:0.4;
+    }
     [data-theme="dark"]{--bg:#000000;--panel:#111111;--text:#e5e7eb;--muted:#9ca3af}
     [data-theme="light"]{--bg:#f3f4f6;--panel:#ffffff;--text:#111827;--muted:#6b7280}
 
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
     .wrap{max-width:1200px;margin:0 auto;padding:16px}
-    header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    /* Structure the header as a vertical column: first row is the title/mode/buttons, second row is the category tabs */
+    header{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
     h1{margin:0;font-size:20px}
 
     .seg{display:flex;gap:4px;background:rgba(255,255,255,.06);padding:4px;border-radius:10px}
     .seg button{border:0;background:transparent;color:#c9d1ff;padding:6px 10px;border-radius:8px;font-weight:700;cursor:pointer}
     .seg button.active{background:var(--accent);color:#111827}
 
-    .panel{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-top:10px}
-    /* Add subtle shadow to panels for depth */
-    .panel{box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+    .panel{
+      background:var(--panel);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:12px;
+      margin-top:10px;
+      /* Slightly deeper shadow for modern look */
+      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+    }
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .pill{padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12)}
-    .btn{border:0;border-radius:10px;padding:8px 12px;font-weight:700;background:var(--accent);color:#0b1020;cursor:pointer}
-    /* Provide subtle hover and active states for buttons */
-    .btn:hover{filter:brightness(1.1)}
-    .btn:active{transform:scale(0.97)}
+    .btn{
+      border:0;
+      border-radius:10px;
+      padding:8px 12px;
+      font-weight:700;
+      background:var(--accent);
+      color:#0b1020;
+      cursor:pointer;
+      /* Smooth hover and active animations */
+      transition:background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+    }
+    /* Visually indicate when buttons are disabled */
+    .btn:disabled{
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+    /* Provide hover and active states for buttons */
+    .btn:not(:disabled):hover{
+      box-shadow:0 2px 6px rgba(0,0,0,0.3);
+      filter:brightness(1.1);
+    }
+    .btn:not(:disabled):active{
+      transform:scale(0.97);
+    }
+    /* Size and spacing for SVG icons inside buttons */
+    .btn svg{
+      width:1em;
+      height:1em;
+      margin-right:4px;
+      vertical-align:middle;
+    }
+
+    /* Active drawing tool styles */
+    #drawTools .btn.active{
+      background: var(--accent);
+      color: var(--panel);
+    }
+    /* Active state for select-based tools (shapes) */
+    select.btn.active{
+      background: var(--accent);
+      color: var(--panel);
+    }
+
+    /* Swatch showing the currently selected brush colour */
+    .color-swatch {
+      display:inline-block;
+      width:20px;
+      height:20px;
+      border-radius:4px;
+      border:1px solid rgba(255,255,255,0.2);
+      margin-left:4px;
+    }
+
+    /* Style for the mode select dropdown to improve visibility */
+    #modeSelect.btn{
+      /* Slightly lighter card background for contrast within dark theme */
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding-right: 1.5rem; /* leave space for default arrow */
+    }
+    /* Provide a consistent appearance for select elements in both themes */
+    #modeSelect.btn option{
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* Connections game layout */
+    .connections-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:var(--conn-gap);
+    }
+    .connections-grid .flag-card{
+      position:relative;
+      cursor:pointer;
+      border:2px solid transparent;
+      border-radius:var(--card-radius);
+      overflow:hidden;
+      aspect-ratio:3/2;
+      background: var(--panel);
+    }
+    .connections-grid .flag-card img{
+      width:100%;
+      height:100%;
+      display:block;
+      /* Use contain so that flags with unusual shapes like Nepal are fully visible */
+      object-fit:contain;
+      object-position:center;
+    }
+    .connections-grid .flag-card.selected{
+      /* Highlight selected cards with a visible accent outline and slight scale */
+      border-color: var(--accent);
+      transform: scale(1.03);
+      /* Use an outer box shadow so the highlight is visible on dark backgrounds */
+      box-shadow: 0 0 0 3px var(--accent), 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .connections-grid .flag-card.fade-out{
+      opacity:0;
+      transition: opacity 0.3s ease;
+    }
+    #connectionsTop{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .connection-group{
+      position:relative;
+      display:flex;
+      gap:4px;
+      padding:2px;
+      border-radius:4px;
+      background: var(--panel);
+    }
+    .connection-group img{
+      /* Keep solved flag images the same size as cards in the grid. The width calculation
+         matches the width of a single grid cell (four cards across with gaps) and
+         preserves the aspect ratio for unusual flags like Nepal. */
+      width: calc((100% - 3*var(--conn-gap)) / 4);
+      height: auto;
+      aspect-ratio: 3/2;
+      object-fit: contain;
+      border-radius: var(--card-radius);
+    }
+
+    /* Animation for a solved card moving up and fading out */
+    .connections-grid .flag-card.anim-solve{
+      /* Use CSS variable for animation duration to allow user adjustments */
+      transition: transform var(--conn-anim-speed) ease, opacity var(--conn-anim-speed) ease;
+      transform: translateY(-60px);
+      opacity:0;
+    }
+
+    /* Animation for the solved group sliding in from below */
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity:0; }
+      to   { transform: translateY(0); opacity:1; }
+    }
+    .connection-group.new{
+      /* Use CSS variable for the animation speed */
+      animation: slideIn var(--conn-anim-speed) ease forwards;
+    }
+    .connection-group .theme-overlay{
+      position:absolute;
+      /* Center overlay horizontally and vertically */
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      background:#ffffff;
+      color:#000000;
+      font-size:14px;
+      font-weight:bold;
+      text-align:center;
+      padding:4px 8px;
+      border-radius:6px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.15);
+      pointer-events:none;
+    }
     .btn.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.2)}
     /* Style select elements that use the .btn classes similarly to buttons */
-    select.btn{appearance:none; border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; background:var(--panel); color:var(--text);}
+    select.btn{appearance:none; border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; background:var(--panel); color:var(--text); min-width:90px;}
     select.btn.ghost{background:transparent;}
     .hidden{display:none!important}
 
@@ -52,23 +228,83 @@
 
     .topright{display:flex;gap:8px;align-items:center}
 
-    .pop{position:fixed;right:16px;top:64px;z-index:60;width:clamp(280px,92vw,760px);max-height:min(78vh,640px);overflow:auto;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
+    /* Header bar for title, current mode, and right-side buttons */
+    .header-bar {
+      /* Use a three‑column grid to center the mode display between the title and control buttons. */
+      display:grid;
+      grid-template-columns:auto 1fr auto;
+      align-items:center;
+      gap:8px;
+    }
+    /* Display of current game mode (centered text with icon) */
+    #modeDisplay {
+      /* Center the mode name within its grid column */
+      justify-self:center;
+      display:flex;
+      align-items:center;
+      font-weight:700;
+      font-size:16px;
+      white-space:nowrap;
+      color:var(--text);
+    }
+
+    /* Mistake indicator dots */
+    .mistake-dot {
+      display:inline-block;
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      background:var(--accent);
+      margin-left:4px;
+      margin-right:4px;
+    }
+    .mistake-dot.used {
+      opacity:0.25;
+    }
+
+    /* Header inside pop-up panels used as drag handle */
+    .panel-header{
+      user-select:none;
+      cursor:move;
+    }
+
+    .pop{
+      position:fixed;
+      /* Centered by default; draggable panels will override left/top */
+      top:80px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:60;
+      width:clamp(280px,92vw,760px);
+      max-height:min(78vh,640px);
+      overflow:auto;
+      background:var(--panel);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:12px;
+    }
     .muted{color:var(--muted);font-size:12px}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Ultimate Flagle</h1>
+      <!-- Header bar: title on left, current game mode in the middle, UI/Settings on the right -->
+      <div class="header-bar" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h1>Ultimate Flagle</h1>
+        <!-- Display the current game mode with its icon. Default to Classic Mode to ensure visibility before script runs -->
+        <span id="modeDisplay" class="header-mode">🎮 Classic Mode</span>
+        <div class="topright">
+          <button class="btn ghost" id="uiBtn">🎨 UI</button>
+          <button class="btn ghost" id="settingsBtn">⚙️ Settings</button>
+        </div>
+      </div>
+      <!-- Category selector remains below the header bar -->
       <div class="seg" id="flagCats">
         <button class="active" data-tab="UN">UN Members</button>
         <button data-tab="Territories">Territories</button>
         <button data-tab="ALL">ALL</button>
         <button data-tab="Custom">Custom</button>
-      </div>
-      <div class="topright">
-        <button class="btn ghost" id="uiBtn">🎨 UI</button>
-        <button class="btn ghost" id="settingsBtn">⚙️ Settings</button>
       </div>
     </header>
 
@@ -77,6 +313,9 @@
         <div class="row">
           <span class="pill">Correct: <b id="ok">0</b></span>
           <span class="pill">Streak: <b id="streak">0</b></span>
+          <!-- Mistakes pill: shown only in Flag Connections unlimited mistakes mode -->
+          <span class="pill hidden" id="mistakesPill">Mistakes: <b id="mistakesCount">0</b></span>
+
           <!-- Header for draw mode showing which flag to draw -->
           <span id="drawHeader" class="hidden" style="margin-left:8px; font-weight:bold;"></span>
           <select id="customSelect" class="hidden"></select>
@@ -84,12 +323,13 @@
         </div>
         <div class="row">
           <button class="btn" id="startBtn">Start</button>
-          <!-- Game mode selector replaces the old Memory Quiz button -->
-          <select id="modeSelect" class="btn ghost">
-            <option value="standard">Standard</option>
-            <option value="memory">Memory Quiz</option>
-            <option value="endless">Endless Hardcore</option>
-          <option value="draw">Draw from Memory</option>
+          <!-- Game mode selector with clearer labels and icons for each mode -->
+          <select id="modeSelect" class="btn">
+            <option value="classic">🎮 Classic Mode</option>
+            <option value="memory">🧠 Memory Quiz</option>
+            <option value="draw">🖌️ Draw The Flag</option>
+            <option value="endless">∞ Endless Hardcore</option>
+            <option value="connections">🔗 Flag Connections</option>
           </select>
           <button class="btn ghost" id="revealBtn" disabled>Reveal</button>
           <button class="btn" id="nextBtn" disabled>Next</button>
@@ -105,6 +345,8 @@
         <label class="row" style="gap:4px; align-items:center;">
           Brush Color
           <input type="color" id="drawColor" value="#ff0000" list="flagColors">
+          <!-- Show a swatch of the current brush colour for easy reference -->
+          <span id="colorSwatch" class="color-swatch"></span>
         </label>
         <!-- Data list providing suggested colours from the current flag -->
         <datalist id="flagColors"></datalist>
@@ -112,12 +354,54 @@
           Brush Size
           <input type="range" id="drawSize" min="1" max="30" value="5">
         </label>
+        <!-- Primary drawing tools with icons -->
+        <div class="row" id="drawTools" style="gap:4px; align-items:center;">
+          <button class="btn ghost" id="toolPen" title="Freehand (Pen)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/></svg>Pen</button>
+          <button class="btn ghost" id="toolEraser" title="Eraser"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M8.086 2.207a2 2 0 0 1 2.828 0l3.879 3.879a2 2 0 0 1 0 2.828l-5.5 5.5A2 2 0 0 1 7.879 15H5.12a2 2 0 0 1-1.414-.586l-2.5-2.5a2 2 0 0 1 0-2.828zm2.121.707a1 1 0 0 0-1.414 0L4.16 7.547l5.293 5.293 4.633-4.633a1 1 0 0 0 0-1.414zM8.746 13.547 3.453 8.254 1.914 9.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 .707.293H7.88a1 1 0 0 0 .707-.293z"/></svg>Erase</button>
+          <button class="btn ghost" id="toolFill" title="Fill (Bucket)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M6.192 2.78c-.458-.677-.927-1.248-1.35-1.643a3 3 0 0 0-.71-.515c-.217-.104-.56-.205-.882-.02-.367.213-.427.63-.43.896-.003.304.064.664.173 1.044.196.687.556 1.528 1.035 2.402L.752 8.22c-.277.277-.269.656-.218.918.055.283.187.593.36.903.348.627.92 1.361 1.626 2.068.707.707 1.441 1.278 2.068 1.626.31.173.62.305.903.36.262.05.64.059.918-.218l5.615-5.615c.118.257.092.512.05.939-.03.292-.068.665-.073 1.176v.123h.003a1 1 0 0 0 1.993 0H14v-.057a1 1 0 0 0-.004-.117c-.055-1.25-.7-2.738-1.86-3.494a4 4 0 0 0-.211-.434c-.349-.626-.92-1.36-1.627-2.067S8.857 3.052 8.23 2.704c-.31-.172-.62-.304-.903-.36-.262-.05-.64-.058-.918.219zM4.16 1.867c.381.356.844.922 1.311 1.632l-.704.705c-.382-.727-.66-1.402-.813-1.938a3.3 3.3 0 0 1-.131-.673q.137.09.337.274m.394 3.965c.54.852 1.107 1.567 1.607 2.033a.5.5 0 1 0 .682-.732c-.453-.422-1.017-1.136-1.564-2.027l1.088-1.088q.081.181.183.365c.349.627.92 1.361 1.627 2.068.706.707 1.44 1.278 2.068 1.626q.183.103.365.183l-4.861 4.862-.068-.01c-.137-.027-.342-.104-.608-.252-.524-.292-1.186-.8-1.846-1.46s-1.168-1.32-1.46-1.846c-.147-.265-.225-.47-.251-.607l-.01-.068zm2.87-1.935a2.4 2.4 0 0 1-.241-.561c.135.033.324.11.562.241.524.292 1.186.8 1.846 1.46.45.45.83.901 1.118 1.31a3.5 3.5 0 0 0-1.066.091 11 11 0 0 1-.76-.694c-.66-.66-1.167-1.322-1.458-1.847z"/></svg>Fill</button>
+          <button class="btn ghost" id="toolPicker" title="Pick Colour"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M13.354.646a1.207 1.207 0 0 0-1.708 0L8.5 3.793l-.646-.647a.5.5 0 1 0-.708.708L8.293 5l-7.147 7.146A.5.5 0 0 0 1 12.5v1.793l-.854.853a.5.5 0 1 0 .708.707L1.707 15H3.5a.5.5 0 0 0 .354-.146L11 7.707l1.146 1.147a.5.5 0 0 0 .708-.708l-.647-.646 3.147-3.146a1.207 1.207 0 0 0 0-1.708zM2 12.707l7-7L10.293 7l-7 7H2z"/></svg>Pick</button>
+          <button class="btn ghost" id="toolUndo" title="Undo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M14.5 1.5a.5.5 0 0 1 .5.5v4.8a2.5 2.5 0 0 1-2.5 2.5H2.707l3.347 3.346a.5.5 0 0 1-.708.708l-4.2-4.2a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 8.3H12.5A1.5 1.5 0 0 0 14 6.8V2a.5.5 0 0 1 .5-.5"/></svg>Undo</button>
+          <button class="btn ghost" id="toolClear" title="Clear Canvas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>Clear</button>
+        </div>
+        <select id="shapeSelect" class="btn ghost" title="Shape">
+          <!-- Additional shapes have been added to allow more variety when drawing -->
+          <option value="line">Line</option>
+          <option value="rect">Rectangle</option>
+          <option value="circle">Circle</option>
+          <option value="ellipse">Ellipse</option>
+          <option value="triangle">Triangle</option>
+          <option value="pentagon">Pentagon</option>
+          <option value="hexagon">Hexagon</option>
+          <option value="star">Star</option>
+          <option value="heart">Heart</option>
+          <option value="diamond">Diamond</option>
+        </select>
+        <label class="row" style="gap:4px; align-items:center;"><input type="checkbox" id="shapeFill"> Fill shape</label>
+        <!-- Removed grid overlay toggle as it proved distracting and unnecessary -->
       </div>
     </section>
 
     <section class="panel">
       <canvas id="flagCanvas" width="900" height="560"></canvas>
       <div id="result" style="margin-top:8px"></div>
+    </section>
+
+    <!-- Flag Connections game panel (hidden by default) -->
+    <section class="panel hidden" id="connectionsPanel">
+      <!-- Solved groups will appear here -->
+      <div id="connectionsTop" class="row" style="flex-wrap:wrap; gap:8px; margin-bottom:8px;"></div>
+      <!-- Grid of flags for connections -->
+      <div id="connectionsGrid" class="connections-grid" style="margin-bottom:8px;"></div>
+      <!-- Row showing remaining mistakes for connections mode; built dynamically -->
+      <div class="row hidden" id="mistakesRow" style="gap:6px; align-items:center; margin-bottom:8px;"></div>
+      <!-- Controls for shuffle, submit and status -->
+      <div class="row" id="connectionsControls" style="gap:8px; align-items:center;">
+        <button class="btn" id="connectionsShuffle">Shuffle</button>
+        <!-- New button to clear the current selection in the connections grid -->
+        <button class="btn ghost" id="connectionsDeselect" disabled>Deselect All</button>
+        <button class="btn" id="connectionsSubmit" disabled>Submit</button>
+        <span id="connectionsStatus" class="muted" style="margin-left:auto;"></span>
+      </div>
     </section>
 
     <section class="panel" id="learnPanel">
@@ -130,8 +414,12 @@
 
   <!-- UI panel -->
   <div class="panel pop hidden" id="uiPanel">
-    <div class="row" style="justify-content:space-between"><b>UI</b><button class="btn ghost" id="closeUi">Close</button></div>
-    <div class="row" style="margin-top:8px">
+    <!-- Draggable header for the UI panel -->
+    <div class="row panel-header" style="justify-content:space-between; cursor:move;">
+      <b>UI Settings</b>
+      <button class="btn ghost" id="closeUi" title="Close">✖</button>
+    </div>
+    <div class="row" style="margin-top:8px; gap:12px; align-items:center; flex-wrap:wrap;">
       <label>Theme</label>
       <select id="themeSelect">
         <option value="dark">Dark (black)</option>
@@ -139,6 +427,20 @@
       </select>
       <label>Accent</label>
       <input type="color" id="accentPicker" value="#93c5fd">
+    </div>
+    <!-- Additional UI options: grid gap and card corner radius for connections game -->
+    <div class="range" style="margin-top:8px">
+      <label>Grid Gap</label>
+      <input id="gapRange" type="range" min="2" max="12" step="1" value="4"><span id="gapVal">4px</span>
+    </div>
+    <div class="range">
+      <label>Card Radius</label>
+      <input id="radiusRange" type="range" min="0" max="20" step="1" value="4"><span id="radiusVal">4px</span>
+    </div>
+    <!-- Animation speed for solved connections -->
+    <div class="range">
+      <label>Anim Speed</label>
+      <input id="speedRange" type="range" min="0.1" max="2" step="0.1" value="0.4"><span id="speedVal">0.4s</span>
     </div>
   </div>
 
@@ -159,62 +461,106 @@
 
   <!-- Settings panel (effects + timer) -->
   <div class="panel pop hidden" id="settingsPanel">
-    <div class="row" style="justify-content:space-between"><b>Flag Effects</b><button class="btn ghost" id="closeSettings">Close</button></div>
+    <!-- Draggable header for the settings panel -->
+    <div class="row panel-header" style="justify-content:space-between; cursor:move;">
+      <b>Flag Effects</b>
+      <button class="btn ghost" id="closeSettings" title="Close">✖</button>
+    </div>
 
     <div class="range" style="margin-top:8px">
-      <label class="row"><input type="checkbox" id="blurToggle"> Blur</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Blur">💧</span>
+        <input type="checkbox" id="blurToggle"> Blur
+      </label>
       <input id="blurRange" type="range" min="0" max="20" step="0.5" value="0"><span id="blurVal">0px</span>
     </div>
 
     <div class="range">
-      <label class="row"><input type="checkbox" id="pixelToggle"> Pixelate</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Pixelate">🔲</span>
+        <input type="checkbox" id="pixelToggle"> Pixelate
+      </label>
       <input id="pixelRange" type="range" min="1" max="60" step="1" value="1"><span id="pixelVal">1</span>
     </div>
 
     <div class="range">
-      <label class="row"><input type="checkbox" id="zoomToggle"> Random Zoom-in</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Random Zoom-in">🔍</span>
+        <input type="checkbox" id="zoomToggle"> Random Zoom-in
+      </label>
       <input id="zoomRange" type="range" min="1" max="6" step="0.1" value="2"><span id="zoomVal">2.0×</span>
     </div>
 
-    <div class="row">
-      <label class="row"><input type="checkbox" id="sixToggle"> 6‑Piece Reveal (on wrong guesses)</label>
+    <div class="row" style="align-items:center; gap:4px;">
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="6‑Piece Reveal">🧩</span>
+        <input type="checkbox" id="sixToggle"> 6‑Piece Reveal (on wrong guesses)
+      </label>
     </div>
-    <div class="row">
-      <label class="row"><input type="checkbox" id="randColorToggle"> Random Colors (per flag)</label>
+    <div class="row" style="align-items:center; gap:4px;">
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Random Colours">🎨</span>
+        <input type="checkbox" id="randColorToggle"> Random Colours (per flag)
+      </label>
     </div>
 
     <hr style="width:100%;border:none;border-top:1px solid rgba(255,255,255,.15)">
 
     <div class="range">
-      <label>Grayscale</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Grayscale">⚫</span> Grayscale
+      </label>
       <input id="gsRange" type="range" min="0" max="1" step="0.05" value="0"><span id="gsVal">0</span>
     </div>
     <div class="range">
-      <label>Invert</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Invert">🔁</span> Invert
+      </label>
       <input id="invRange" type="range" min="0" max="1" step="0.05" value="0"><span id="invVal">0</span>
     </div>
     <div class="range">
-      <label>Hue</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Hue">🌈</span> Hue
+      </label>
       <input id="hueRange" type="range" min="0" max="360" step="1" value="0"><span id="hueVal">0°</span>
     </div>
     <div class="range">
-      <label>Saturation</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Saturation">🔆</span> Saturation
+      </label>
       <input id="satRange" type="range" min="0" max="3" step="0.05" value="1"><span id="satVal">1.00×</span>
     </div>
     <div class="range">
-      <label>Contrast</label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Contrast">🌓</span> Contrast
+      </label>
       <input id="conRange" type="range" min="0" max="3" step="0.05" value="1"><span id="conVal">1.00×</span>
     </div>
 
     <hr style="width:100%;border:none;border-top:1px solid rgba(255,255,255,.15)">
 
     <div class="range">
-      <label>Timer (show flag): <span id="timerVal">∞</span></label>
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Timer">⏲️</span> Timer (show flag): <span id="timerVal">∞</span>
+      </label>
       <input id="timerRange" type="range" min="0.01" max="5" step="0.01" value="5">
-      <label class="row"><input type="checkbox" id="timerInfinite" checked> ∞</label>
+      <label class="row" style="align-items:center; gap:4px;"><input type="checkbox" id="timerInfinite" checked> ∞</label>
+    </div>
+
+    <!-- Option to disable mistake limit specifically for Flag Connections -->
+    <div class="row" style="align-items:center; gap:4px; margin-top:8px;">
+      <label class="row" style="align-items:center; gap:4px;">
+        <span title="Unlimited mistakes">♾️</span>
+        <input type="checkbox" id="unlimitedMistakesToggle"> Unlimited mistakes (Flag Connections)
+      </label>
     </div>
 
     <div class="muted" id="applyNote">Changes apply to the <b>next</b> flag.</div>
+    <!-- Preview canvas showing USA flag with current effect settings -->
+    <div id="previewContainer" style="text-align:center;margin-top:12px;">
+      <canvas id="effectsPreview" width="200" height="120" style="border:1px solid rgba(255,255,255,0.2); border-radius:8px;"></canvas>
+      <div class="muted" style="margin-top:4px;">Preview (USA)</div>
+    </div>
   </div>
 
 <script>
@@ -224,6 +570,16 @@
   const startBtn = $('#startBtn');
   // Game mode selector
   const modeSelect = $('#modeSelect');
+  // Current mode display in header
+  const modeDisplay = $('#modeDisplay');
+  // Mapping of internal mode names to display names with icons
+  const modeNames = {
+    classic: '🎮 Classic Mode',
+    memory: '🧠 Memory Quiz',
+    draw: '🖌️ Draw The Flag',
+    endless: '∞ Endless Hardcore',
+    connections: '🔗 Flag Connections'
+  };
   const revealBtn = $('#revealBtn');
   const nextBtn = $('#nextBtn');
   const submitBtn = $('#submitBtn');
@@ -233,6 +589,10 @@
   const ctx = canvas.getContext('2d');
   const okEl = $('#ok');
   const streakEl = $('#streak');
+  const mistakesPill = $('#mistakesPill');
+  const mistakesCount = $('#mistakesCount');
+  const mistakesRow = $('#mistakesRow');
+  const connectionsDeselect = $('#connectionsDeselect');
   const learnList = $('#learnList');
   // Panel showing the browse/learn list (hidden in endless mode)
   const learnPanel = $('#learnPanel');
@@ -252,6 +612,171 @@
   const drawColor = $('#drawColor');
   const drawSize = $('#drawSize');
   const drawHeader = $('#drawHeader');
+  // Display swatch showing current colour
+  const colorSwatch = $('#colorSwatch');
+  // Drawing tool buttons and controls
+  const toolPen = $('#toolPen');
+  const toolEraser = $('#toolEraser');
+  const toolFill = $('#toolFill');
+  const toolPicker = $('#toolPicker');
+  const toolUndo = $('#toolUndo');
+  const toolClear = $('#toolClear');
+  // Shape selection and fill toggle
+  const shapeSelect = $('#shapeSelect');
+  const shapeFill = $('#shapeFill');
+  // Grid toggle removed; no longer used
+  const gridToggle = null;
+
+  // Elements for Flag Connections mode
+  const connectionsPanel = $('#connectionsPanel');
+  const connectionsTop = $('#connectionsTop');
+  const connectionsGrid = $('#connectionsGrid');
+  const connectionsShuffle = $('#connectionsShuffle');
+  const connectionsSubmit = $('#connectionsSubmit');
+  const connectionsStatus = $('#connectionsStatus');
+
+  // Current drawing tool ('pen','eraser','fill','picker','line','rect','circle','ellipse','triangle')
+  let currentTool = 'pen';
+  // Keep track of previously selected tool (used to revert after using the colour picker)
+  let prevTool = 'pen';
+
+  // List of all shape tools. When one of these is active, the shape dropdown
+  // should be highlighted instead of the individual tool buttons.
+  // Include all supported shape tools.  When any of these shapes is
+  // selected the shape dropdown will be highlighted instead of the
+  // freehand tool buttons.  The order here should match the
+  // <option> entries in the shapeSelect dropdown.
+  const shapeTools = ['line','rect','circle','ellipse','triangle','pentagon','hexagon','star','heart','diamond'];
+  // History stack for undo functionality. Each entry stores ImageData.
+  const history = [];
+  // Image data snapshot for shape preview drawing
+  let shapePreviewImgData = null;
+  // Track shape drawing start coordinates
+  let startX = 0;
+  let startY = 0;
+  let drawingShape = false;
+
+  /**
+   * Update the canvas background grid based on the grid toggle. Uses a
+   * repeating linear gradient to draw gridlines every 20 pixels. If the grid
+   * is disabled, clears any custom background image.
+   */
+  function updateGrid() {
+    if (gridToggle && gridToggle.checked) {
+      canvas.style.backgroundImage =
+        'linear-gradient(to right, rgba(0,0,0,0.15) 1px, transparent 1px), ' +
+        'linear-gradient(to bottom, rgba(0,0,0,0.15) 1px, transparent 1px)';
+      canvas.style.backgroundSize = '20px 20px';
+    } else {
+      canvas.style.backgroundImage = '';
+    }
+  }
+
+  /**
+   * Save the current canvas state into the history stack for undo.
+   */
+  function saveState() {
+    try {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      history.push(imgData);
+      // Limit history length to avoid memory bloat
+      if (history.length > 50) history.shift();
+    } catch(err) {
+      console.warn('Could not save state for undo', err);
+    }
+  }
+
+  /**
+   * Undo the last drawing operation by restoring the previous canvas state.
+   */
+  function undo() {
+    if (history.length === 0) return;
+    const prev = history.pop();
+    ctx.putImageData(prev, 0, 0);
+  }
+
+  /**
+   * Clear the drawing canvas and reset it to a white background. Saves the state
+   * to the history stack so the action can be undone.
+   */
+  function clearCanvas() {
+    // Save current state before clearing
+    saveState();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  /**
+   * Convert a hex colour string (e.g. '#ff0000') to an array [r,g,b].
+   * @param {string} hex
+   * @returns {number[]} RGB array
+   */
+  function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    const intVal = parseInt(hex, 16);
+    return [(intVal >> 16) & 255, (intVal >> 8) & 255, intVal & 255];
+  }
+
+  /**
+   * Flood fill starting at (x, y) with the current brush colour.
+   * This fills contiguous regions of the same starting colour.
+   * @param {number} x
+   * @param {number} y
+   */
+  function floodFill(x, y) {
+    // Clamp coordinates
+    x = Math.floor(x);
+    y = Math.floor(y);
+    // Acquire image data once
+    const width = canvas.width;
+    const height = canvas.height;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const idx = (y * width + x) * 4;
+    const targetR = data[idx];
+    const targetG = data[idx + 1];
+    const targetB = data[idx + 2];
+    const targetA = data[idx + 3];
+    // Determine replacement colour
+    const [repR, repG, repB] = hexToRgb(drawColor.value);
+    // If target and replacement colours are the same, nothing to fill
+    if (targetR === repR && targetG === repG && targetB === repB && targetA === 255) {
+      return;
+    }
+    const queue = [];
+    queue.push([x, y]);
+    // Track visited pixels to avoid infinite loops
+    const visited = new Uint8Array(width * height);
+    while (queue.length > 0) {
+      const [cx, cy] = queue.pop();
+      if (cx < 0 || cy < 0 || cx >= width || cy >= height) continue;
+      const index = (cy * width + cx);
+      if (visited[index]) continue;
+      const di = index * 4;
+      const cr = data[di];
+      const cg = data[di + 1];
+      const cb = data[di + 2];
+      const ca = data[di + 3];
+      if (cr === targetR && cg === targetG && cb === targetB && ca === targetA) {
+        // Replace pixel colour
+        data[di] = repR;
+        data[di + 1] = repG;
+        data[di + 2] = repB;
+        data[di + 3] = 255;
+        visited[index] = 1;
+        // Enqueue neighbouring pixels
+        queue.push([cx + 1, cy]);
+        queue.push([cx - 1, cy]);
+        queue.push([cx, cy + 1]);
+        queue.push([cx, cy - 1]);
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
 
   // UI panels
   const uiBtn=$('#uiBtn'), uiPanel=$('#uiPanel'), closeUi=$('#closeUi');
@@ -287,6 +812,156 @@
   const timerInfinite=$('#timerInfinite');
   const timerVal=$('#timerVal');
 
+  // Unlimited mistakes toggle for flag connections
+  const unlimitedMistakesToggle = $('#unlimitedMistakesToggle');
+
+  // Range controls for adjusting the spacing and corner radius of the
+  // connections grid. When these inputs change, update the corresponding
+  // CSS variables and update their labels.
+  const gapRange = $('#gapRange');
+  const gapVal = $('#gapVal');
+  const radiusRange = $('#radiusRange');
+  const radiusVal = $('#radiusVal');
+  const speedRange = $('#speedRange');
+  const speedVal = $('#speedVal');
+  if (gapRange && gapVal) {
+    const updateGap = () => {
+      const val = gapRange.value;
+      document.documentElement.style.setProperty('--conn-gap', val + 'px');
+      gapVal.textContent = val + 'px';
+    };
+    gapRange.addEventListener('input', updateGap);
+    updateGap();
+  }
+  if (radiusRange && radiusVal) {
+    const updateRadius = () => {
+      const val = radiusRange.value;
+      document.documentElement.style.setProperty('--card-radius', val + 'px');
+      radiusVal.textContent = val + 'px';
+    };
+    radiusRange.addEventListener('input', updateRadius);
+    updateRadius();
+  }
+
+  // Update animation speed for solved connections
+  if (speedRange && speedVal) {
+    const updateSpeed = () => {
+      const val = parseFloat(speedRange.value);
+      document.documentElement.style.setProperty('--conn-anim-speed', val + 's');
+      speedVal.textContent = val.toFixed(1) + 's';
+    };
+    speedRange.addEventListener('input', updateSpeed);
+    updateSpeed();
+  }
+
+  // Update state.unlimitedMistakes when the toggle changes. Also update the mistakes display if currently in connections mode.
+  if (unlimitedMistakesToggle) {
+    const updateUnlimited = () => {
+      state.unlimitedMistakes = unlimitedMistakesToggle.checked;
+      // If already in connections mode, update the mistakes remaining display accordingly
+      updateMistakesDisplay();
+    };
+    unlimitedMistakesToggle.addEventListener('change', updateUnlimited);
+    // Do not call updateUnlimited() here because `state` may not yet be defined.  We'll
+    // initialize the unlimited mistakes state after `state` is declared later in the file.
+    // updateUnlimited();
+  }
+
+  // --- Preview of flag effects ---
+  const previewCanvas = $('#effectsPreview');
+  const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+  // Load the USA flag for the preview. Cross-origin is allowed for this domain.
+  let previewImg = null;
+  if (previewCanvas) {
+    previewImg = new Image();
+    previewImg.crossOrigin = 'anonymous';
+    previewImg.src = 'https://flagcdn.com/w320/us.png';
+    previewImg.onload = () => {
+      updatePreview();
+    };
+  }
+
+  /**
+   * Draw the USA flag into the preview canvas with the currently pending effects.
+   * Pixelation is approximated by downscaling and upscaling. Other filter
+   * effects are applied using the canvas context filter property.
+   */
+  function updatePreview() {
+    if (!previewCanvas || !previewImg || !previewCtx) return;
+    const w = previewCanvas.width;
+    const h = previewCanvas.height;
+    previewCtx.save();
+    // Clear the canvas
+    previewCtx.clearRect(0, 0, w, h);
+    const p = state.effectsPending;
+    // Build filter string
+    const parts = [];
+    if (p.gs > 0) parts.push(`grayscale(${p.gs})`);
+    if (p.inv > 0) parts.push(`invert(${p.inv})`);
+    const hueTotal = ((p.hue || 0)) % 360;
+    if (hueTotal !== 0) parts.push(`hue-rotate(${hueTotal}deg)`);
+    if (p.sat !== 1) parts.push(`saturate(${p.sat})`);
+    if (p.con !== 1) parts.push(`contrast(${p.con})`);
+    if (p.blurOn && p.blurPx > 0) parts.push(`blur(${p.blurPx}px)`);
+    previewCtx.filter = parts.join(' ');
+    if (p.pixelOn && p.pixel > 1) {
+      const scale = 1 / p.pixel;
+      const offW = Math.max(1, Math.round(w * scale));
+      const offH = Math.max(1, Math.round(h * scale));
+      const off = document.createElement('canvas');
+      off.width = offW;
+      off.height = offH;
+      const offCtx = off.getContext('2d');
+      offCtx.imageSmoothingEnabled = false;
+      offCtx.drawImage(previewImg, 0, 0, offW, offH);
+      previewCtx.imageSmoothingEnabled = false;
+      previewCtx.drawImage(off, 0, 0, offW, offH, 0, 0, w, h);
+    } else {
+      previewCtx.imageSmoothingEnabled = true;
+      previewCtx.drawImage(previewImg, 0, 0, w, h);
+    }
+    previewCtx.restore();
+  }
+
+  /**
+   * Update the mistakes display for Flag Connections mode.
+   * If unlimited mistakes are enabled, hide the mistakes row and show the mistakes pill next to the streak counter.
+   * Otherwise, show up to four mistake dots indicating remaining mistakes. Used mistakes are faded.
+   */
+  function updateMistakesDisplay() {
+    // Only meaningful in connections mode
+    if (state.mode !== 'connections') {
+      // Hide mistakes UI outside of connections mode
+      if (mistakesRow) mistakesRow.classList.add('hidden');
+      if (mistakesPill) mistakesPill.classList.add('hidden');
+      return;
+    }
+    // Unlimited mistakes case
+    if (state.unlimitedMistakes) {
+      // Hide the row of circles and show the pill
+      if (mistakesRow) mistakesRow.classList.add('hidden');
+      if (mistakesPill) {
+        mistakesPill.classList.remove('hidden');
+        if (mistakesCount) mistakesCount.textContent = state.connectionsMistakesUsed;
+      }
+    } else {
+      // Limited mistakes: show row with up to maxMistakes dots; hide pill
+      if (mistakesPill) mistakesPill.classList.add('hidden');
+      if (mistakesRow) {
+        mistakesRow.classList.remove('hidden');
+        const maxMistakes = state.maxMistakes || 4;
+        const remaining = Math.max(0, maxMistakes - state.connectionsMistakesUsed);
+        let html = '';
+        html += '<span class="muted">Mistakes Remaining:</span>';
+        for (let i = 0; i < maxMistakes; i++) {
+          const used = i >= remaining;
+          html += `<span class="mistake-dot${used ? ' used' : ''}"></span>`;
+        }
+        mistakesRow.innerHTML = html;
+      }
+    }
+  }
+
   // ----------------- Data (UN + Territories) -----------------
   const COMMON = {"United Kingdom of Great Britain and Northern Ireland":"United Kingdom","United States of America":"United States","Korea (Republic of)":"South Korea","Korea (Democratic People's Republic of)":"North Korea","Côte d’Ivoire":"Cote d'Ivoire","Viet Nam":"Vietnam","Syrian Arab Republic":"Syria","Iran (Islamic Republic of)":"Iran","Russian Federation":"Russia","Lao People's Democratic Republic":"Laos","Venezuela (Bolivarian Republic of)":"Venezuela","Tanzania, United Republic of":"Tanzania","Türkiye":"Turkey","Timor-Leste":"East Timor"};
   const NICK = {"United States":["USA","US","U.S.","U.S.A","America","United States of America"],"United Kingdom":["UK","Britain","Great Britain"],"Russia":["Russian Federation"],"South Korea":["Korea, South","Republic of Korea","ROK"],"North Korea":["Korea, North","Democratic People's Republic of Korea","DPRK"],"Cote d'Ivoire":["Ivory Coast"],"Czech Republic":["Czechia"],"Myanmar":["Burma"],"Turkey":["Türkiye"],"East Timor":["Timor-Leste"],"Laos":["Lao PDR","Lao People's Democratic Republic"],"Syria":["Syrian Arab Republic"],"Vietnam":["Viet Nam"],"Taiwan":["Republic of China","ROC"],"Palestine":["State of Palestine","Palestine, State of"],"Moldova":["Republic of Moldova"],"Micronesia":["Micronesia (Federated States of)","FSM"],"North Macedonia":["Macedonia"],"DR Congo":["Democratic Republic of the Congo","Congo (DRC)","Congo-Kinshasa","Congo, Democratic Republic of the"],"Republic of the Congo":["Congo-Brazzaville","Congo"]};
@@ -312,12 +987,37 @@
   const seen = new Set();
   const dataAll = [...dataUN, ...dataTerr].filter(x=>{if(seen.has(x.cca2)) return false; seen.add(x.cca2); return true;}).sort((a,b)=>a.name.localeCompare(b.name));
 
-  const state = { activeTab:'UN', quizPool:[], current:null, ok:0, streak:0, timerMs:Infinity, hideTimeout:null, mode:'standard', memory:{sequence:[], index:0}, lastImage:null, piecesRevealed:1,
+  const state = { activeTab:'UN', quizPool:[], current:null, ok:0, streak:0, timerMs:Infinity, hideTimeout:null, memory:{sequence:[], index:0}, lastImage:null, piecesRevealed:1,
+    // The current game mode (classic, memory, draw, endless, connections)
+    mode:'classic',
     effectsCurrent:{ blurOn:false, blurPx:0, pixelOn:false, pixel:1, zoomOn:false, zoom:2, six:false, randColor:false, gs:0, inv:0, hue:0, sat:1, con:1 },
     effectsPending:{ blurOn:false, blurPx:0, pixelOn:false, pixel:1, zoomOn:false, zoom:2, six:false, randColor:false, gs:0, inv:0, hue:0, sat:1, con:1 },
-    userPresets: []
+    userPresets: [],
+    // Maximum mistakes allowed in connections mode (when unlimited mistakes is disabled)
+    maxMistakes: 4,
+    // Number of mistakes made so far in the current connections round
+    connectionsMistakesUsed: 0,
+    // Whether unlimited mistakes are enabled in Flag Connections
+    unlimitedMistakes: false
   };
   state.customMode='UN_EASY';
+
+  // Immediately populate the mode display with the default mode name (before any games are started).
+  // We do this here because `state` is now defined and DOM elements have been queried. This ensures
+  // the header shows the currently selected mode upon page load.
+  if (modeDisplay && modeNames[state.mode]) {
+    modeDisplay.innerHTML = modeNames[state.mode];
+  }
+
+  // Initialize unlimited mistakes setting now that `state` is defined.  If the user
+  // has toggled unlimited mistakes in the settings panel prior to loading a
+  // connections game, this ensures `state.unlimitedMistakes` reflects the toggle
+  // state.  updateUnlimited() is defined earlier in this script.
+  try {
+    if (typeof updateUnlimited === 'function') updateUnlimited();
+  } catch(err) {
+    // ignore if updateUnlimited is not defined or throws
+  }
 
   // ---- User presets (localStorage) ----
   const PRESET_KEY = 'uf_user_presets_v1';
@@ -449,8 +1149,8 @@
   function buildLearn(){ const src=getSource(); learnList.innerHTML = src.map(x=>`<div class="item"><img loading="lazy" src="${x.flag}" alt="${x.name}"><small>${x.name}</small></div>`).join(''); }
 
   function startGame(){
-    // Start standard mode and reset counters
-    state.mode = 'standard';
+    // Start classic mode and reset counters
+    state.mode = 'classic';
     state.ok = 0;
     state.streak = 0;
     okEl.textContent = 0;
@@ -459,6 +1159,13 @@
     state.quizPool = shuffle(getSource().slice());
     // Hide draw header when leaving draw mode
     drawHeader.classList.add('hidden');
+    // Hide connections panel when entering classic mode
+    connectionsPanel.classList.add('hidden');
+    // Show result area and canvas for standard play
+    resultEl.classList.remove('hidden');
+    canvas.classList.remove('hidden');
+    // Show the generic submit button used in most modes
+    submitBtn.classList.remove('hidden');
     // Ensure the answer input is visible and drawing controls are hidden
     answer.classList.remove('hidden');
     drawControls.classList.add('hidden');
@@ -473,6 +1180,8 @@
     learnPanel.classList.remove('hidden');
     // Reset effects to user-selected pending settings
     state.effectsCurrent = JSON.parse(JSON.stringify(state.effectsPending));
+    // Update the mode display
+    if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
     nextFlag();
   }
 
@@ -574,6 +1283,13 @@
     submitBtn.disabled = false;
     // Hide the draw header in endless mode
     drawHeader.classList.add('hidden');
+    // Hide connections panel when entering endless mode
+    connectionsPanel.classList.add('hidden');
+    // Ensure the canvas and result elements are visible
+    canvas.classList.remove('hidden');
+    resultEl.classList.remove('hidden');
+    // Show the generic submit button for endless mode
+    submitBtn.classList.remove('hidden');
     // Ensure the answer input is visible and drawing controls are hidden
     answer.classList.remove('hidden');
     drawControls.classList.add('hidden');
@@ -585,6 +1301,8 @@
     revealBtn.disabled = true;
     nextBtn.disabled = true;
     // Start by drawing the first flag via nextFlag (randomization happens there)
+    // Update mode display
+    if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
     nextFlag();
   }
 
@@ -602,6 +1320,13 @@
     // Hide the answer input field but keep the submit button visible, and show drawing controls
     answer.classList.add('hidden');
     drawControls.classList.remove('hidden');
+    // Hide connections panel when entering draw mode
+    connectionsPanel.classList.add('hidden');
+    // Ensure canvas and result area are visible
+    canvas.classList.remove('hidden');
+    resultEl.classList.remove('hidden');
+    // Show the generic submit button for draw mode
+    submitBtn.classList.remove('hidden');
     // Hide reveal and next buttons initially in draw mode
     revealBtn.classList.add('hidden');
     revealBtn.disabled = true;
@@ -615,10 +1340,16 @@
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Grid overlay removed; nothing to update here
     // Show the draw header
     drawHeader.classList.remove('hidden');
+    // Update mode display
+    if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
     // Start with a new flag to draw
     nextDraw();
+
+    // Update colour swatch in case the palette takes time to load
+    updateSwatch();
   }
 
   // Advance to the next flag in draw-from-memory mode
@@ -639,6 +1370,7 @@
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Grid overlay removed; nothing to update here
     // Hide reveal and next buttons until the user submits their drawing
     revealBtn.classList.add('hidden');
     revealBtn.disabled = true;
@@ -700,6 +1432,641 @@
     if (h < 170) return 'green';
     if (h < 275) return 'blue';
     return 'red';
+  }
+
+  // ----------------- Flag Connections Theme Generation -----------------
+  // Data structure to hold themes for the flag connections mode.
+  // Each theme has a name and an array of entries (flags) belonging to that theme.
+  let connectionsThemes = [];
+  // Flags to ensure themes are built only once
+  let connectionsBuiltSimple = false;
+  let connectionsBuiltColors = false;
+
+  /**
+   * Build a variety of simple categories for the Connections game.  Themes
+   * include continents, subregions, name patterns (starting/ending with
+   * specific letters, containing letters) and name length.  Only
+   * categories containing at least 4 flags are kept.  This function
+   * populates the global `connectionsThemes` array and will not run more
+   * than once.
+   */
+  function buildSimpleConnectionsThemes() {
+    if (connectionsBuiltSimple) return;
+    connectionsBuiltSimple = true;
+    connectionsThemes = [];
+    // Restrict the pool to UN member countries only for connections themes
+    const pool = dataUN;
+    // Build continent themes
+    const continents = {};
+    for (const e of pool) {
+      if (!continents[e.continent]) continents[e.continent] = [];
+      continents[e.continent].push(e);
+    }
+    for (const cont in continents) {
+      const list = continents[cont];
+      if (list.length >= 4) connectionsThemes.push({ name: `Flags from ${cont}`, flags: list, type: 'continent' });
+    }
+    // Build subregion themes (e.g., Western Europe, Southern Asia)
+    const subregions = {};
+    for (const e of pool) {
+      const sub = e.subregion || '';
+      if (!subregions[sub]) subregions[sub] = [];
+      subregions[sub].push(e);
+    }
+    for (const sub in subregions) {
+      const list = subregions[sub];
+      if (sub && list.length >= 4) connectionsThemes.push({ name: `${sub}`, flags: list, type: 'subregion' });
+    }
+    // Create categories for names starting with each letter
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (const ch of alphabet) {
+      const arr = pool.filter(e => e.name.toUpperCase().startsWith(ch));
+      if (arr.length >= 4) connectionsThemes.push({ name: `Countries starting with ${ch}`, flags: arr, type: 'first_letter' });
+    }
+    // Do NOT create categories for names containing each letter, as this category is too vague
+    // Create categories for names ending with each letter
+    for (const ch of alphabet) {
+      const arr = pool.filter(e => e.name.toUpperCase().endsWith(ch));
+      if (arr.length >= 4) connectionsThemes.push({ name: `Countries ending with ${ch}`, flags: arr, type: 'last_letter' });
+    }
+    // Create categories based on the length of the country name (letters only)
+    for (let len = 4; len <= 12; len++) {
+      const arr = pool.filter(e => e.name.replace(/\s+/g, '').length === len);
+      if (arr.length >= 4) connectionsThemes.push({ name: `${len}-letter names`, flags: arr, type: 'length' });
+    }
+    // Additional pattern-based categories for more variety.  Each pattern is an object with
+    // a substring and a display name.  Categories are built from countries whose names
+    // include or end with the substring, depending on the pattern type.  Only kept if
+    // at least 4 matching countries are found.
+    const patterns = [
+      { substr: 'ISLAND', name: 'Countries containing Island', type: 'keyword' },
+      { substr: 'ISLANDS', name: 'Countries containing Islands', type: 'keyword' },
+      { substr: 'LAND', name: 'Countries containing Land', type: 'keyword' },
+      { substr: 'STAN', name: 'Countries ending with -stan', type: 'keyword' },
+      { substr: 'UNI', name: 'Countries containing United', type: 'keyword' },
+      { substr: 'REPUB', name: 'Countries containing Republic', type: 'keyword' },
+      { substr: 'SAINT', name: 'Countries containing Saint', type: 'keyword' },
+      { substr: 'GUINEA', name: 'Countries containing Guinea', type: 'keyword' },
+      { substr: 'NEW ', name: 'Countries starting with New', type: 'keyword' },
+      { substr: 'KOREA', name: 'Countries containing Korea', type: 'keyword' },
+      { substr: 'EMIRATES', name: 'Countries containing Emirates', type: 'keyword' },
+      { substr: 'ARAB', name: 'Countries containing Arab', type: 'keyword' },
+      { substr: 'SOUTH ', name: 'Countries starting with South', type: 'keyword' },
+      { substr: 'NORTH ', name: 'Countries starting with North', type: 'keyword' },
+      { substr: 'EAST ', name: 'Countries starting with East', type: 'keyword' },
+      { substr: 'WEST ', name: 'Countries starting with West', type: 'keyword' }
+    ];
+    for (const p of patterns) {
+      let arr;
+      const sub = p.substr.toUpperCase();
+      // If the pattern specifies a space at the end (e.g., "NEW ") treat it as prefix
+      if (sub.endsWith(' ')) {
+        const prefix = sub.trimEnd();
+        arr = pool.filter(e => e.name.toUpperCase().startsWith(prefix));
+      } else if (sub.startsWith('-')) {
+        // Patterns starting with '-' would indicate suffix, but none are defined here
+        arr = [];
+      } else if (sub === 'STAN') {
+        arr = pool.filter(e => e.name.toUpperCase().endsWith(sub));
+      } else {
+        arr = pool.filter(e => e.name.toUpperCase().includes(sub));
+      }
+      if (arr.length >= 4) connectionsThemes.push({ name: p.name, flags: arr, type: p.type });
+    }
+  }
+
+  /**
+   * Build colour-based themes by analysing flag images.  Each flag
+   * is sampled at low resolution and pixels are classified into
+   * coarse colours (red, yellow, green, blue, black, white).  If a
+   * particular colour is present in significant quantities in a flag,
+   * that flag is added to the corresponding theme.  The analysis is
+   * asynchronous; themes are only added once the images have been
+   * processed.  Only categories containing at least 4 flags are kept.
+   */
+  async function buildColorConnectionsThemes() {
+    if (connectionsBuiltColors) return;
+    connectionsBuiltColors = true;
+    // Temporary buckets for each coarse colour
+    const colorBuckets = { red: [], yellow: [], green: [], blue: [], black: [], white: [] };
+    // Only use UN member flags for colour themes to exclude territories
+    const promises = dataUN.map(entry => new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        try {
+          const off = document.createElement('canvas');
+          off.width = 100;
+          off.height = 60;
+          const ctx2 = off.getContext('2d');
+          ctx2.drawImage(img, 0, 0, off.width, off.height);
+          const pixels = ctx2.getImageData(0, 0, off.width, off.height).data;
+          const counts = { red: 0, yellow: 0, green: 0, blue: 0, black: 0, white: 0 };
+          for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i];
+            const g = pixels[i + 1];
+            const b = pixels[i + 2];
+            const cat = classifyColor(r, g, b);
+            if (counts[cat] !== undefined) counts[cat]++;
+          }
+          // Determine presence thresholds; at least 100 pixels indicates the colour is
+          // strongly present
+          for (const c in counts) {
+            if (counts[c] > 100) {
+              colorBuckets[c].push(entry);
+            }
+          }
+        } catch(err) {
+          // ignore errors
+        }
+        resolve();
+      };
+      img.onerror = function() { resolve(); };
+      // Use a smaller resolution version if available; flagcdn supports w160
+      let url = entry.flag;
+      url = url.replace('/w320/', '/w160/');
+      img.src = url;
+    }));
+    await Promise.all(promises);
+    // Convert colour buckets into themes
+    for (const c in colorBuckets) {
+      const list = colorBuckets[c];
+      if (list.length >= 4) {
+        const cap = c.charAt(0).toUpperCase() + c.slice(1);
+        connectionsThemes.push({ name: `Flags with ${cap}`, flags: list, type: 'color' });
+      }
+    }
+  }
+
+  /**
+   * Ensure that all themes required for the connections game have been built.
+   * Builds simple themes synchronously and colour themes asynchronously if
+   * they haven't been processed yet.
+   */
+  async function ensureConnectionsThemes() {
+    buildSimpleConnectionsThemes();
+    await buildColorConnectionsThemes();
+  }
+
+  // ----- Flag Connections Game Implementation -----
+  // Data structures for the current connections round. These variables are
+  // reset whenever a new round of the connections game starts.
+  let connectionsCurrentThemes = [];
+  let connectionsGridData = [];
+  let connectionsSelected = [];
+  let connectionsSolved = [];
+
+  /**
+   * Start the Flag Connections mode. This function resets relevant game
+   * state, ensures that the theme categories have been built, hides other
+   * game UI, and displays the connections panel. Once themes are ready it
+   * generates a fresh round of 4 hidden themes and 16 flags.
+   */
+  async function startConnections() {
+    // Set mode and reset score counters
+    state.mode = 'connections';
+    state.ok = 0;
+    state.streak = 0;
+    okEl.textContent = state.ok;
+    streakEl.textContent = state.streak;
+
+    // Reset mistakes used for this round. This counter increases on each wrong guess.
+    state.connectionsMistakesUsed = 0;
+    // Update the mistakes display and scoreboard pill accordingly
+    updateMistakesDisplay();
+    // Hide other panels that are not used in connections mode
+    // Hide drawing header and controls
+    drawHeader.classList.add('hidden');
+    drawControls.classList.add('hidden');
+    // Hide the canvas used for other modes
+    canvas.classList.add('hidden');
+    // Hide the answer input and disable it
+    answer.classList.add('hidden');
+    answer.disabled = true;
+    // Disable reveal and next buttons
+    revealBtn.disabled = true;
+    nextBtn.disabled = true;
+    // Clear and hide the result element
+    resultEl.innerHTML = '';
+    resultEl.classList.add('hidden');
+    // Hide the learn/browse panel (so users cannot cheat by browsing the pool)
+    learnPanel.classList.add('hidden');
+    // Show the connections panel
+    connectionsPanel.classList.remove('hidden');
+    // Clear any previous solved groups and grid
+    connectionsTop.innerHTML = '';
+    connectionsGrid.innerHTML = '';
+    // Clear any prior status messages (including HTML)
+    connectionsStatus.innerHTML = '';
+    // Disable submit button until exactly 4 selections are made
+    connectionsSubmit.disabled = true;
+    // Disable deselect button until there is at least one selection
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    // Hide the generic submit button used in other modes
+    submitBtn.classList.add('hidden');
+    submitBtn.disabled = true;
+    // Build themes (if not already built)
+    await ensureConnectionsThemes();
+    // Generate a new round
+    buildConnectionsRound();
+  }
+
+  /**
+   * Generate a new round of the Flag Connections game. Chooses four distinct
+   * themes at random from the available themes and selects four unique
+   * flags for each theme. The resulting 16 flags are shuffled and rendered
+   * into the connections grid. Each flag card stores its theme name via a
+   * data attribute so that selections can be evaluated later.
+   */
+  function buildConnectionsRound() {
+    // Reset per‑round state
+    connectionsCurrentThemes = [];
+    connectionsGridData = [];
+    connectionsSelected = [];
+    connectionsSolved = [];
+    // Clear UI
+    connectionsTop.innerHTML = '';
+    connectionsGrid.innerHTML = '';
+    // Clear any status message from previous round
+    connectionsStatus.innerHTML = '';
+    connectionsSubmit.disabled = true;
+    // Disable deselect button at the start of a round
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    // Randomly pick four unique themes that have not yet been solved.
+    const themesPool = connectionsThemes.slice();
+    shuffle(themesPool);
+    const chosenThemes = [];
+    while (themesPool.length > 0 && chosenThemes.length < 4) {
+      const theme = themesPool.shift();
+      // Ensure each chosen theme has at least 4 flags and avoid selecting more than one theme of the same type
+      if (theme && Array.isArray(theme.flags) && theme.flags.length >= 4) {
+        if (!chosenThemes.some(t => t.type === theme.type)) {
+          chosenThemes.push(theme);
+        }
+      }
+    }
+    // If fewer than 4 themes were available, abort
+    if (chosenThemes.length < 4) {
+      connectionsStatus.innerHTML = '<span class="bad">Not enough themes to play.</span>';
+      return;
+    }
+    connectionsCurrentThemes = chosenThemes;
+    // Collect flags: pick up to 4 unique flags per theme. Avoid duplicates
+    const usedNames = new Set();
+    for (const t of chosenThemes) {
+      // Shuffle the flags list before picking
+      const list = shuffle(t.flags.slice());
+      let added = 0;
+      for (const e of list) {
+        // Ensure we don't reuse the same country across multiple themes
+        if (!usedNames.has(e.name)) {
+          connectionsGridData.push({ theme: t.name, entry: e });
+          usedNames.add(e.name);
+          added++;
+        }
+        if (added >= 4) break;
+      }
+    }
+    // If we ended up with more or less than 16 flags (due to duplicates),
+    // adjust by trimming or adding additional flags from the same themes.
+    // Trim extras
+    if (connectionsGridData.length > 16) {
+      connectionsGridData = connectionsGridData.slice(0, 16);
+    }
+    // Add missing flags by cycling through chosen themes
+    let themeIndex = 0;
+    while (connectionsGridData.length < 16) {
+      const t = chosenThemes[themeIndex % chosenThemes.length];
+      // Pick another flag not yet used
+      for (const e of t.flags) {
+        if (!usedNames.has(e.name)) {
+          connectionsGridData.push({ theme: t.name, entry: e });
+          usedNames.add(e.name);
+          break;
+        }
+      }
+      themeIndex++;
+    }
+    // Shuffle the final list to randomise placement
+    shuffle(connectionsGridData);
+    // Render each flag into the grid
+    connectionsGridData.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'flag-card';
+      card.dataset.idx = idx;
+      card.dataset.theme = item.theme;
+      card.dataset.solved = 'false';
+      const img = document.createElement('img');
+      img.src = item.entry.flag;
+      img.alt = item.entry.name;
+      img.loading = 'lazy';
+      card.appendChild(img);
+      connectionsGrid.appendChild(card);
+    });
+  }
+
+  /**
+   * Handler for clicking a flag card in the connections grid. Toggles the
+   * selected state of the card (up to four selections at a time) and
+   * updates the submit button accordingly.
+   */
+  function onConnectionsCardClick(e) {
+    const card = e.target.closest('.flag-card');
+    if (!card) return;
+    // Ignore clicks on solved cards
+    if (card.dataset.solved === 'true') return;
+    // Toggle selection
+    if (card.classList.contains('selected')) {
+      card.classList.remove('selected');
+      connectionsSelected = connectionsSelected.filter(x => x !== card);
+    } else {
+      if (connectionsSelected.length >= 4) {
+        // Only allow up to 4 selections
+        return;
+      }
+      card.classList.add('selected');
+      connectionsSelected.push(card);
+    }
+    // Enable submit button only when exactly four cards are selected
+    connectionsSubmit.disabled = connectionsSelected.length !== 4;
+    // Enable or disable deselect button based on whether any selections are present
+    if (connectionsDeselect) connectionsDeselect.disabled = connectionsSelected.length === 0;
+  }
+
+  /**
+   * Shuffle the unsolved flag cards within the connections grid. Applies a
+   * brief fade‑out effect before reordering the DOM to create a pleasing
+   * visual shuffle. The selected state is cleared on shuffle.
+   */
+  function shuffleConnections() {
+    // Collect unsolved cards
+    const cards = Array.from(connectionsGrid.children).filter(card => card.dataset.solved !== 'true');
+    // Clear any selections
+    connectionsSelected.forEach(card => card.classList.remove('selected'));
+    connectionsSelected = [];
+    connectionsSubmit.disabled = true;
+    // Disable deselect button since no cards are selected after shuffle
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    // Apply fade‑out
+    cards.forEach(card => card.classList.add('fade-out'));
+    // After the fade, reorder the cards randomly and fade back in
+    setTimeout(() => {
+      shuffle(cards);
+      cards.forEach(card => connectionsGrid.appendChild(card));
+      cards.forEach(card => card.classList.remove('fade-out'));
+    }, 200);
+  }
+
+  /**
+   * Remove all current selections in the connections grid. Used when the user
+   * clicks the "Deselect All" button. Clears the selected state of each
+   * card, empties the list of currently selected cards, disables the
+   * submit and deselect buttons, and clears any status message.
+   */
+  function deselectConnections() {
+    connectionsSelected.forEach(card => card.classList.remove('selected'));
+    connectionsSelected = [];
+    connectionsSubmit.disabled = true;
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    connectionsStatus.textContent = '';
+  }
+
+  /**
+   * Evaluate the current selection of four cards. If all four belong to
+   * the same theme, they are moved to the solved area with an overlay
+   * showing the theme name. If three belong to the same theme and one
+   * does not, a “One Away” hint is shown. Otherwise, the guess is marked
+   * incorrect. After evaluation, selections are cleared.
+   */
+  function submitConnections() {
+    if (connectionsSelected.length !== 4) {
+      // Should not happen since the button is disabled otherwise
+      return;
+    }
+    // Tally the themes of selected cards
+    const counts = {};
+    connectionsSelected.forEach(card => {
+      const t = card.dataset.theme;
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    let bestTheme = null;
+    let bestCount = 0;
+    for (const [theme, count] of Object.entries(counts)) {
+      if (count > bestCount) {
+        bestTheme = theme;
+        bestCount = count;
+      }
+    }
+    // Clear any existing status
+    connectionsStatus.textContent = '';
+    // Evaluate guess
+    if (bestCount === 4 && bestTheme) {
+      // Correct connection found. Animate the cards into the solved area.
+      connectionsStatus.innerHTML = `<span style="color:var(--ok)">✔️ ${bestTheme}</span>`;
+      // Copy selected cards
+      const origCards = connectionsSelected.slice();
+      // Create group and overlay
+      const group = document.createElement('div');
+      group.className = 'connection-group new';
+      origCards.forEach(card => {
+        const imgSrc = card.querySelector('img').src;
+        const imgAlt = card.querySelector('img').alt;
+        const imgEl = document.createElement('img');
+        imgEl.src = imgSrc;
+        imgEl.alt = imgAlt;
+        group.appendChild(imgEl);
+      });
+      const overlay = document.createElement('div');
+      overlay.className = 'theme-overlay';
+      overlay.textContent = bestTheme;
+      group.appendChild(overlay);
+      // Hide until animation finishes
+      group.style.visibility = 'hidden';
+      connectionsTop.appendChild(group);
+      // Create clones for animation
+      const clones = [];
+      origCards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const img = card.querySelector('img');
+        const clone = img.cloneNode(true);
+        clone.style.position = 'fixed';
+        clone.style.top = `${rect.top}px`;
+        clone.style.left = `${rect.left}px`;
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+        clone.style.margin = '0';
+        clone.style.zIndex = '100';
+        clone.style.borderRadius = getComputedStyle(card).borderRadius;
+        clone.style.transition = 'transform 0.6s ease, opacity 0.6s ease';
+        document.body.appendChild(clone);
+        clones.push(clone);
+        card.dataset.solved = 'true';
+        card.classList.remove('selected');
+      });
+      // Animate clones to new positions
+      requestAnimationFrame(() => {
+        const finalImgs = group.querySelectorAll('img');
+        finalImgs.forEach((finalImg, i) => {
+          const finalRect = finalImg.getBoundingClientRect();
+          const clone = clones[i];
+          const origRect = origCards[i].getBoundingClientRect();
+          const dx = finalRect.left - origRect.left;
+          const dy = finalRect.top - origRect.top;
+          const scaleX = finalRect.width / origRect.width;
+          const scaleY = finalRect.height / origRect.height;
+          clone.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+        });
+        setTimeout(() => {
+          group.style.visibility = '';
+          clones.forEach(cl => cl.remove());
+          origCards.forEach(card => card.remove());
+        }, 650);
+      });
+      connectionsSolved.push(bestTheme);
+      connectionsSelected = [];
+      connectionsSubmit.disabled = true;
+      // Disable deselect button since no cards are selected
+      if (connectionsDeselect) connectionsDeselect.disabled = true;
+      if (connectionsSolved.length === 4) {
+        connectionsStatus.innerHTML = `<span style="color:var(--ok)">🎉 You solved all connections!</span>`;
+      }
+    } else {
+      // Wrong or one-away guess. Decrement or increment mistakes count accordingly.
+      // Determine if this guess is one away or completely wrong
+      const oneAway = bestCount === 3;
+      if (oneAway) {
+        connectionsStatus.innerHTML = `<span style="color:var(--warn)">One Away!</span>`;
+      } else {
+        connectionsStatus.innerHTML = `<span style="color:var(--bad)">Not a connection.</span>`;
+      }
+      // Increase mistakes used count
+      state.connectionsMistakesUsed++;
+      // Update mistakes UI
+      updateMistakesDisplay();
+      // If unlimited mistakes disabled and mistakes exceed maxMistakes, end the game
+      if (!state.unlimitedMistakes) {
+        const remaining = (state.maxMistakes || 4) - state.connectionsMistakesUsed;
+        if (remaining <= 0) {
+          // No more mistakes allowed: reveal all remaining connections and end the round.
+          connectionsStatus.innerHTML = `<span style="color:var(--bad)">No mistakes remaining.</span>`;
+          // Animate and reveal all unsolved connections, then disable further interaction.
+          revealAllConnections();
+          return;
+        }
+      }
+      // Clear selections for next guess
+      connectionsSelected.forEach(card => card.classList.remove('selected'));
+      connectionsSelected = [];
+      connectionsSubmit.disabled = true;
+      // Disable deselect button as no cards are selected
+      if (connectionsDeselect) connectionsDeselect.disabled = true;
+    }
+  }
+
+  /**
+   * Update the colour swatch to reflect the currently selected brush colour.
+   * Sets both the swatch background and border to the brush colour for
+   * easy visual reference.
+   */
+  function updateSwatch() {
+    if (!colorSwatch) return;
+    const col = drawColor.value;
+    colorSwatch.style.backgroundColor = col;
+    colorSwatch.style.borderColor = col;
+  }
+
+  /**
+   * Reveal all remaining connections when the player runs out of mistakes.
+   * This function groups the unsolved flags by their theme and moves them
+   * into the solved area with the same animation used for correct guesses.
+   * After revealing all connections, the grid is disabled so the user
+   * cannot make further selections in the current round.
+   */
+  function revealAllConnections() {
+    // Gather all unsolved cards (those not already marked as solved)
+    const unsolved = Array.from(connectionsGrid.children).filter(card => card.dataset.solved !== 'true');
+    if (unsolved.length === 0) {
+      return;
+    }
+    // Group cards by their theme name
+    const groups = {};
+    unsolved.forEach(card => {
+      const theme = card.dataset.theme;
+      if (!groups[theme]) groups[theme] = [];
+      groups[theme].push(card);
+    });
+    // For each theme group, animate the cards into the solved area
+    Object.keys(groups).forEach(theme => {
+      const cards = groups[theme];
+      if (!cards || cards.length === 0) return;
+      // Create solved group container and overlay
+      const group = document.createElement('div');
+      group.className = 'connection-group new';
+      // Add flag images to the group
+      cards.forEach(card => {
+        const img = card.querySelector('img');
+        const imgEl = document.createElement('img');
+        imgEl.src = img.src;
+        imgEl.alt = img.alt;
+        group.appendChild(imgEl);
+      });
+      const overlay = document.createElement('div');
+      overlay.className = 'theme-overlay';
+      overlay.textContent = theme;
+      group.appendChild(overlay);
+      group.style.visibility = 'hidden';
+      connectionsTop.appendChild(group);
+      // Create clones for animation
+      const clones = [];
+      cards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const img = card.querySelector('img');
+        const clone = img.cloneNode(true);
+        clone.style.position = 'fixed';
+        clone.style.top = `${rect.top}px`;
+        clone.style.left = `${rect.left}px`;
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+        clone.style.margin = '0';
+        clone.style.zIndex = '100';
+        clone.style.borderRadius = getComputedStyle(card).borderRadius;
+        clone.style.transition = 'transform 0.6s ease, opacity 0.6s ease';
+        document.body.appendChild(clone);
+        clones.push(clone);
+        // Mark original card as solved and remove selected state
+        card.dataset.solved = 'true';
+        card.classList.remove('selected');
+      });
+      // Start animation on next frame
+      requestAnimationFrame(() => {
+        const finalImgs = group.querySelectorAll('img');
+        finalImgs.forEach((finalImg, i) => {
+          const finalRect = finalImg.getBoundingClientRect();
+          const origRect = cards[i].getBoundingClientRect();
+          const dx = finalRect.left - origRect.left;
+          const dy = finalRect.top - origRect.top;
+          const scaleX = finalRect.width / origRect.width;
+          const scaleY = finalRect.height / origRect.height;
+          const clone = clones[i];
+          clone.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+        });
+        setTimeout(() => {
+          group.style.visibility = '';
+          clones.forEach(cl => cl.remove());
+          cards.forEach(card => card.remove());
+        }, 650);
+      });
+    });
+    // Clear any selections and disable further interaction with the grid
+    connectionsSelected.forEach(card => card.classList.remove('selected'));
+    connectionsSelected = [];
+    connectionsSubmit.disabled = true;
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    if (connectionsShuffle) connectionsShuffle.disabled = true;
+    // Remove click handlers from all cards
+    connectionsGrid.querySelectorAll('.flag-card').forEach(card => {
+      card.removeEventListener('click', onConnectionsCardClick);
+    });
   }
 
   /**
@@ -775,7 +2142,102 @@
       if (colors.length > 0) {
         drawColor.value = colors[0];
         ctx.strokeStyle = drawColor.value;
+        updateSwatch();
       }
+
+  /**
+   * Reveal all remaining connections when the player runs out of mistakes.
+   * This function groups the unsolved flags by their theme and moves them
+   * into the solved area with the same animation used for correct guesses.
+   * After revealing all connections, the grid is disabled so the user
+   * cannot make further selections in the current round.
+   */
+  function revealAllConnections() {
+    // Gather all unsolved cards (those not already marked as solved)
+    const unsolved = Array.from(connectionsGrid.children).filter(card => card.dataset.solved !== 'true');
+    if (unsolved.length === 0) {
+      return;
+    }
+    // Group cards by their theme name
+    const groups = {};
+    unsolved.forEach(card => {
+      const theme = card.dataset.theme;
+      if (!groups[theme]) groups[theme] = [];
+      groups[theme].push(card);
+    });
+    // For each theme group, animate the cards into the solved area
+    Object.keys(groups).forEach(theme => {
+      const cards = groups[theme];
+      if (!cards || cards.length === 0) return;
+      // Create solved group container and overlay
+      const group = document.createElement('div');
+      group.className = 'connection-group new';
+      // Add flag images to the group
+      cards.forEach(card => {
+        const img = card.querySelector('img');
+        const imgEl = document.createElement('img');
+        imgEl.src = img.src;
+        imgEl.alt = img.alt;
+        group.appendChild(imgEl);
+      });
+      const overlay = document.createElement('div');
+      overlay.className = 'theme-overlay';
+      overlay.textContent = theme;
+      group.appendChild(overlay);
+      group.style.visibility = 'hidden';
+      connectionsTop.appendChild(group);
+      // Create clones for animation
+      const clones = [];
+      cards.forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const img = card.querySelector('img');
+        const clone = img.cloneNode(true);
+        clone.style.position = 'fixed';
+        clone.style.top = `${rect.top}px`;
+        clone.style.left = `${rect.left}px`;
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+        clone.style.margin = '0';
+        clone.style.zIndex = '100';
+        clone.style.borderRadius = getComputedStyle(card).borderRadius;
+        clone.style.transition = 'transform 0.6s ease, opacity 0.6s ease';
+        document.body.appendChild(clone);
+        clones.push(clone);
+        // Mark original card as solved and remove selected state
+        card.dataset.solved = 'true';
+        card.classList.remove('selected');
+      });
+      // Start animation on next frame
+      requestAnimationFrame(() => {
+        const finalImgs = group.querySelectorAll('img');
+        finalImgs.forEach((finalImg, i) => {
+          const finalRect = finalImg.getBoundingClientRect();
+          const origRect = cards[i].getBoundingClientRect();
+          const dx = finalRect.left - origRect.left;
+          const dy = finalRect.top - origRect.top;
+          const scaleX = finalRect.width / origRect.width;
+          const scaleY = finalRect.height / origRect.height;
+          const clone = clones[i];
+          clone.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+        });
+        setTimeout(() => {
+          group.style.visibility = '';
+          clones.forEach(cl => cl.remove());
+          cards.forEach(card => card.remove());
+        }, 650);
+      });
+    });
+    // Clear any selections and disable further interaction with the grid
+    connectionsSelected.forEach(card => card.classList.remove('selected'));
+    connectionsSelected = [];
+    connectionsSubmit.disabled = true;
+    if (connectionsDeselect) connectionsDeselect.disabled = true;
+    if (connectionsShuffle) connectionsShuffle.disabled = true;
+    // Remove click handlers from all cards
+    connectionsGrid.querySelectorAll('.flag-card').forEach(card => {
+      card.removeEventListener('click', onConnectionsCardClick);
+    });
+  }
     };
     img.onerror = function() {
       // On error, clear the datalist to avoid stale entries
@@ -846,7 +2308,7 @@
         nextBtn.disabled = false;
       }
       return;
-    } else if(state.mode==='standard' || state.mode==='endless'){
+    } else if(state.mode==='classic' || state.mode==='endless'){
       if(!state.current) return;
       const val=answer.value.trim(); if(!val) return; answer.value='';
       if(matches(val,state.current)){
@@ -893,7 +2355,7 @@
         else { resultEl.innerHTML=`<span class="ok">Correct</span> — ${idx+1}/5`; }
       } else {
         resultEl.innerHTML = `<span class="bad">Wrong at #${idx+1}.</span> Correct order: ${seq.map(e=>e.name).join(' • ')}`;
-        state.mode='standard';
+        state.mode='classic';
       }
       answer.focus();
     }
@@ -903,6 +2365,13 @@
     state.mode='memory'; resultEl.textContent='';
     // Hide draw header in memory mode
     drawHeader.classList.add('hidden');
+    // Hide connections panel when entering memory mode
+    connectionsPanel.classList.add('hidden');
+    // Ensure canvas and result area are visible
+    canvas.classList.remove('hidden');
+    resultEl.classList.remove('hidden');
+    // Show the generic submit button for memory mode (disabled until ready)
+    submitBtn.classList.remove('hidden');
     // Ensure the answer input is visible and drawing controls are hidden when entering memory mode
     answer.classList.remove('hidden');
     drawControls.classList.add('hidden');
@@ -910,6 +2379,8 @@
     revealBtn.classList.remove('hidden');
     nextBtn.classList.remove('hidden');
     learnPanel.classList.remove('hidden');
+    // Update mode display
+    if (modeDisplay) modeDisplay.innerHTML = modeNames[state.mode];
     const src=shuffle(getSource().slice()); state.memory.sequence=src.slice(0,5); state.memory.index=0;
     answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true; nextBtn.disabled=true;
     const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -941,7 +2412,12 @@
     p.con = +conRange.value; conVal.textContent = p.con.toFixed(2)+"×";
   }
 
-  function onEffectUIChange(){ syncPendingFromUI(); document.getElementById('applyNote').classList.remove('hidden'); }
+  function onEffectUIChange(){
+    syncPendingFromUI();
+    document.getElementById('applyNote').classList.remove('hidden');
+    // Update the preview canvas so users can see the new effects immediately
+    updatePreview();
+  }
 
   settingsBtn.addEventListener('click',()=>settingsPanel.classList.toggle('hidden'));
   closeSettings.addEventListener('click',()=>settingsPanel.classList.add('hidden'));
@@ -972,14 +2448,19 @@
 
   // Start button chooses a mode based on the game mode selector
   startBtn.addEventListener('click', () => {
-    const mode = modeSelect.value || 'standard';
+    // Determine which mode has been chosen from the mode selector. Default to
+    // classic if none is selected.
+    const mode = modeSelect.value || 'classic';
     if (mode === 'memory') {
       startMemory();
     } else if (mode === 'endless') {
       startEndless();
     } else if (mode === 'draw') {
       startDraw();
+    } else if (mode === 'connections') {
+      startConnections();
     } else {
+      // 'classic' and any unknown value fallback to the classic game mode
       startGame();
     }
   });
@@ -1008,6 +2489,7 @@
   // Update the stroke colour whenever the user picks a new colour
   drawColor.addEventListener('input', () => {
     ctx.strokeStyle = drawColor.value;
+    updateSwatch();
   });
 
   // Drawing logic for draw-from-memory mode
@@ -1020,40 +2502,410 @@
   // pointerup. The end of a drawing stroke is handled only on
   // pointerup.
   canvas.addEventListener('pointerdown', (e) => {
-    if(state.mode !== 'draw') return;
-    drawing = true;
-    try {
-      // capture the pointer so drawing continues even if the pointer
-      // leaves the canvas bounds
-      canvas.setPointerCapture(e.pointerId);
-    } catch(err) { /* ignore if unsupported */ }
-    // Set stroke style and size based on user controls
-    ctx.strokeStyle = drawColor.value;
-    ctx.lineWidth = parseFloat(drawSize.value);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    if (state.mode !== 'draw') return;
+    // Determine canvas coordinates
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * canvas.width / rect.width;
     const y = (e.clientY - rect.top) * canvas.height / rect.height;
+    // Save state for undo before any drawing operation
+    saveState();
+    // Handle colour picker tool: sample the clicked pixel's colour and set brush
+    if (currentTool === 'picker') {
+      try {
+        const pixel = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+        const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+        drawColor.value = hex;
+        ctx.strokeStyle = hex;
+        // Update swatch to reflect the picked colour
+        updateSwatch();
+        // Automatically revert to the previously selected tool for convenience
+        selectTool(prevTool || 'pen');
+      } catch(err) {
+        console.warn('Eyedropper failed', err);
+      }
+      return;
+    }
+    // Handle fill bucket tool
+    if (currentTool === 'fill') {
+      // Fill the region starting at the clicked pixel
+      floodFill(x, y);
+      // No further drawing for fill tool
+      return;
+    }
+    // If the current tool is a shape, prepare to draw a shape.  Use the
+    // shapeTools array to identify all supported shape types.
+    if (shapeTools.includes(currentTool)) {
+      drawingShape = true;
+      startX = x;
+      startY = y;
+      // Capture a snapshot of the canvas for previewing the shape
+      try {
+        shapePreviewImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } catch(err) {
+        shapePreviewImgData = null;
+      }
+      // Use pointer capture so we continue receiving events
+      try { canvas.setPointerCapture(e.pointerId); } catch(err) {}
+      return;
+    }
+    // Freehand drawing or erasing tools
+    drawing = true;
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch(err) {}
+    // Configure stroke styles
+    if (currentTool === 'eraser') {
+      // Use destination-out blending for the eraser. This will punch holes in
+      // existing drawings regardless of brush colour. A solid stroke colour
+      // must still be provided (black here) but is ignored when compositing.
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    } else {
+      // Normal drawing uses the selected colour and source-over composition.
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = drawColor.value;
+    }
+    ctx.lineWidth = parseFloat(drawSize.value);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
     lastX = x;
     lastY = y;
   });
   canvas.addEventListener('pointermove', (e) => {
-    if(!drawing || state.mode !== 'draw') return;
+    if (state.mode !== 'draw') return;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * canvas.width / rect.width;
     const y = (e.clientY - rect.top) * canvas.height / rect.height;
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    lastX = x;
-    lastY = y;
+    // Preview shapes while the pointer is down
+    if (drawingShape) {
+      // Restore the canvas to its state at the beginning of the shape
+      if (shapePreviewImgData) {
+        ctx.putImageData(shapePreviewImgData, 0, 0);
+      }
+      // Use a dashed stroke for previews
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = parseFloat(drawSize.value);
+      ctx.strokeStyle = drawColor.value;
+      switch (currentTool) {
+        case 'line':
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          break;
+        case 'rect': {
+          const w = x - startX;
+          const h = y - startY;
+          ctx.strokeRect(startX, startY, w, h);
+          break;
+        }
+        case 'circle': {
+          const dx = x - startX;
+          const dy = y - startY;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+          ctx.beginPath();
+          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
+        case 'ellipse': {
+          const rx = (x - startX) / 2;
+          const ry = (y - startY) / 2;
+          const cx = startX + rx;
+          const cy = startY + ry;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
+        case 'triangle':
+          // Draw a right‑angled triangle preview
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(x, y);
+          ctx.lineTo(startX, y);
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        case 'pentagon': {
+          // Draw a pentagon preview based on bounding box percentages
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + 0.5 * w, startY); // top
+          ctx.lineTo(startX + 1.0 * w, startY + 0.38 * h);
+          ctx.lineTo(startX + 0.81 * w, startY + 1.0 * h);
+          ctx.lineTo(startX + 0.19 * w, startY + 1.0 * h);
+          ctx.lineTo(startX, startY + 0.38 * h);
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        }
+        case 'hexagon': {
+          // Draw a hexagon preview based on bounding box percentages
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + 0.25 * w, startY); // top‑left slanted
+          ctx.lineTo(startX + 0.75 * w, startY);
+          ctx.lineTo(startX + 1.0 * w, startY + 0.5 * h);
+          ctx.lineTo(startX + 0.75 * w, startY + 1.0 * h);
+          ctx.lineTo(startX + 0.25 * w, startY + 1.0 * h);
+          ctx.lineTo(startX, startY + 0.5 * h);
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        }
+        case 'star': {
+          // Draw a five‑pointed star preview centred in the bounding box.
+          const w = x - startX;
+          const h = y - startY;
+          const sx = startX;
+          const sy = startY;
+          const wAbs = Math.abs(w);
+          const hAbs = Math.abs(h);
+          const cx = sx + w / 2;
+          const cy = sy + h / 2;
+          // Outer radius based on the smaller dimension; inner radius at half the outer
+          const outer = 0.5 * Math.min(wAbs, hAbs);
+          const inner = outer * 0.5;
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = -Math.PI / 2 + i * (2 * Math.PI / 5);
+            const ox = cx + outer * Math.cos(angle);
+            const oy = cy + outer * Math.sin(angle);
+            if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+            const innerAngle = angle + Math.PI / 5;
+            const ix = cx + inner * Math.cos(innerAngle);
+            const iy = cy + inner * Math.sin(innerAngle);
+            ctx.lineTo(ix, iy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        }
+        case 'heart': {
+          // Draw a heart preview inside the bounding box using Bézier curves.
+          const w = x - startX;
+          const h = y - startY;
+          const sx = Math.min(startX, x);
+          const sy = Math.min(startY, y);
+          const wAbs = Math.abs(w);
+          const hAbs = Math.abs(h);
+          ctx.beginPath();
+          ctx.moveTo(sx + 0.5 * wAbs, sy + 0.35 * hAbs);
+          ctx.bezierCurveTo(sx + wAbs, sy, sx + wAbs, sy + 0.7 * hAbs, sx + 0.5 * wAbs, sy + hAbs);
+          ctx.bezierCurveTo(sx, sy + 0.7 * hAbs, sx, sy, sx + 0.5 * wAbs, sy + 0.35 * hAbs);
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        }
+        case 'diamond': {
+          // Draw a diamond (rhombus) preview based on bounding box.  The
+          // diamond is essentially a rotated square defined by its
+          // bounding box.  It uses four points: top, right, bottom and
+          // left midpoints of the bounding box.
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + w / 2, startY);
+          ctx.lineTo(startX + w, startY + h / 2);
+          ctx.lineTo(startX + w / 2, startY + h);
+          ctx.lineTo(startX, startY + h / 2);
+          ctx.closePath();
+          ctx.stroke();
+          break;
+        }
+      }
+      ctx.restore();
+      return;
+    }
+    // Handle freehand drawing and erasing
+    if (drawing && (currentTool === 'pen' || currentTool === 'eraser')) {
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      lastX = x;
+      lastY = y;
+    }
   });
   function endDrawingEvent(e) {
-    if(state.mode !== 'draw') return;
+    if (state.mode !== 'draw') return;
+    // Finalize drawing shapes or freehand on pointer up
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
+    if (drawingShape) {
+      drawingShape = false;
+      // Restore the canvas to its snapshot before drawing the shape
+      if (shapePreviewImgData) {
+        ctx.putImageData(shapePreviewImgData, 0, 0);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = parseFloat(drawSize.value);
+      ctx.strokeStyle = drawColor.value;
+      ctx.fillStyle = drawColor.value;
+      switch (currentTool) {
+        case 'line':
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          break;
+        case 'rect': {
+          const w = x - startX;
+          const h = y - startY;
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fillRect(startX, startY, w, h);
+          }
+          ctx.strokeRect(startX, startY, w, h);
+          break;
+        }
+        case 'circle': {
+          const dx = x - startX;
+          const dy = y - startY;
+          const radius = Math.sqrt(dx * dx + dy * dy);
+          ctx.beginPath();
+          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'ellipse': {
+          const rx = (x - startX) / 2;
+          const ry = (y - startY) / 2;
+          const cx = startX + rx;
+          const cy = startY + ry;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'triangle':
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(x, y);
+          ctx.lineTo(startX, y);
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        case 'pentagon': {
+          // Finalize pentagon shape
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + 0.5 * w, startY);
+          ctx.lineTo(startX + 1.0 * w, startY + 0.38 * h);
+          ctx.lineTo(startX + 0.81 * w, startY + 1.0 * h);
+          ctx.lineTo(startX + 0.19 * w, startY + 1.0 * h);
+          ctx.lineTo(startX, startY + 0.38 * h);
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'hexagon': {
+          // Finalize hexagon shape
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + 0.25 * w, startY);
+          ctx.lineTo(startX + 0.75 * w, startY);
+          ctx.lineTo(startX + 1.0 * w, startY + 0.5 * h);
+          ctx.lineTo(startX + 0.75 * w, startY + 1.0 * h);
+          ctx.lineTo(startX + 0.25 * w, startY + 1.0 * h);
+          ctx.lineTo(startX, startY + 0.5 * h);
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'star': {
+          // Finalize star shape
+          const w = x - startX;
+          const h = y - startY;
+          const wAbs = Math.abs(w);
+          const hAbs = Math.abs(h);
+          // Determine centre of bounding box
+          const cx = startX + w / 2;
+          const cy = startY + h / 2;
+          const outer = 0.5 * Math.min(wAbs, hAbs);
+          const inner = outer * 0.5;
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = -Math.PI / 2 + i * (2 * Math.PI / 5);
+            const ox = cx + outer * Math.cos(angle);
+            const oy = cy + outer * Math.sin(angle);
+            if (i === 0) ctx.moveTo(ox, oy); else ctx.lineTo(ox, oy);
+            const innerAngle = angle + Math.PI / 5;
+            const ix = cx + inner * Math.cos(innerAngle);
+            const iy = cy + inner * Math.sin(innerAngle);
+            ctx.lineTo(ix, iy);
+          }
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'heart': {
+          // Finalize heart shape
+          const w = x - startX;
+          const h = y - startY;
+          const sx2 = Math.min(startX, x);
+          const sy2 = Math.min(startY, y);
+          const wAbs = Math.abs(w);
+          const hAbs = Math.abs(h);
+          ctx.beginPath();
+          ctx.moveTo(sx2 + 0.5 * wAbs, sy2 + 0.35 * hAbs);
+          ctx.bezierCurveTo(sx2 + wAbs, sy2, sx2 + wAbs, sy2 + 0.7 * hAbs, sx2 + 0.5 * wAbs, sy2 + hAbs);
+          ctx.bezierCurveTo(sx2, sy2 + 0.7 * hAbs, sx2, sy2, sx2 + 0.5 * wAbs, sy2 + 0.35 * hAbs);
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+        case 'diamond': {
+          // Finalize diamond shape using four vertices at the midpoints of each side
+          const w = x - startX;
+          const h = y - startY;
+          ctx.beginPath();
+          ctx.moveTo(startX + w / 2, startY);
+          ctx.lineTo(startX + w, startY + h / 2);
+          ctx.lineTo(startX + w / 2, startY + h);
+          ctx.lineTo(startX, startY + h / 2);
+          ctx.closePath();
+          if (document.getElementById('shapeFill').checked) {
+            ctx.fill();
+          }
+          ctx.stroke();
+          break;
+        }
+      }
+      // Clear the preview snapshot after finalizing
+      shapePreviewImgData = null;
+    }
+    // Finish freehand drawing or eraser tool
     drawing = false;
-    if(e && typeof e.pointerId === 'number') {
+    ctx.globalCompositeOperation = 'source-over';
+    if (e && typeof e.pointerId === 'number') {
       try {
         canvas.releasePointerCapture(e.pointerId);
       } catch(err) { /* ignore if unsupported */ }
@@ -1062,6 +2914,96 @@
   canvas.addEventListener('pointerup', endDrawingEvent);
   // We intentionally do not end drawing on pointerleave to prevent
   // accidental cut‑offs; pointerup will properly end the stroke.
+
+  /**
+   * Set the current drawing tool and update the active button styling.
+   * @param {string} tool Name of the tool ('pen','eraser','fill','picker','line','rect','circle','ellipse','triangle')
+   */
+  function selectTool(tool) {
+    currentTool = tool;
+    // Remove active classes from all tools and shape dropdown
+    [toolPen, toolEraser, toolFill, toolPicker].forEach(btn => btn.classList.remove('active'));
+    shapeSelect.classList.remove('active');
+    // Highlight whichever tool was selected. If it's a shape, highlight the
+    // shape dropdown and set its value accordingly.
+    if (tool === 'pen') {
+      toolPen.classList.add('active');
+    } else if (tool === 'eraser') {
+      toolEraser.classList.add('active');
+    } else if (tool === 'fill') {
+      toolFill.classList.add('active');
+    } else if (tool === 'picker') {
+      toolPicker.classList.add('active');
+    } else if (shapeTools.includes(tool)) {
+      shapeSelect.classList.add('active');
+      // Update the shape dropdown to match the selected shape
+      shapeSelect.value = tool;
+    }
+  }
+  // Initialise default tool
+  selectTool('pen');
+  // Initialise the colour swatch with the default brush colour
+  updateSwatch();
+  // Tool button event listeners
+  toolPen.addEventListener('click', () => selectTool('pen'));
+  toolEraser.addEventListener('click', () => selectTool('eraser'));
+  toolFill.addEventListener('click', () => selectTool('fill'));
+  toolPicker.addEventListener('click', () => {
+    // Remember the current tool so we can revert after picking
+    prevTool = currentTool;
+    selectTool('picker');
+  });
+  // Undo is a one-off action, does not change current tool
+  toolUndo.addEventListener('click', () => undo());
+  // Clear canvas is a one-off action, does not change current tool
+  toolClear.addEventListener('click', () => clearCanvas());
+  // Shape selection: update currentTool and highlight dropdown
+  shapeSelect.addEventListener('change', () => {
+    selectTool(shapeSelect.value);
+  });
+
+  // When the user presses down on the shape dropdown, automatically switch to
+  // the currently selected shape if not already using a shape tool. This way
+  // the dropdown is highlighted and active as soon as you open it. The
+  // subsequent 'change' event (triggered when selecting a new shape) will
+  // update the tool again.
+  shapeSelect.addEventListener('mousedown', () => {
+    if (!shapeTools.includes(currentTool)) {
+      selectTool(shapeSelect.value);
+    }
+  });
+
+  // ----- Flag Connections event listeners -----
+  // Handle selection of flags in the connections grid
+  connectionsGrid.addEventListener('click', onConnectionsCardClick);
+  // Shuffle remaining unsolved flags
+  connectionsShuffle.addEventListener('click', shuffleConnections);
+  // Evaluate the selected flags and submit as a guess
+  connectionsSubmit.addEventListener('click', submitConnections);
+
+  // Deselect all currently selected cards
+  connectionsDeselect.addEventListener('click', () => {
+    deselectConnections();
+  });
+
+  // ----- Mode Display Updates -----
+  // On initial load, show the display name of the default mode (state.mode).
+  // The state object is defined later, but we can wait until DOMContentLoaded to ensure it exists.
+  document.addEventListener('DOMContentLoaded', () => {
+    if (modeDisplay && typeof state !== 'undefined' && modeNames[state.mode]) {
+      modeDisplay.innerHTML = modeNames[state.mode];
+    }
+  });
+  // Whenever the user selects a different mode in the drop‑down, update the mode display to show
+  // the name and icon, even before the game starts. This makes the UI reflect the user's selection.
+  modeSelect.addEventListener('change', () => {
+    const selected = modeSelect.value;
+    if (modeNames[selected] && modeDisplay) {
+      modeDisplay.innerHTML = modeNames[selected];
+    }
+  });
+
+  // Grid toggle removed; no event listener necessary
 
   function buildCustomOptions(){
     const base=[
@@ -1136,6 +3078,49 @@
   buildCustomOptions();
   updateDatalist();
   buildLearn();
+
+  // Enable draggable pop-up panels. Panels with a `.panel-header` inside
+  // their `.pop` container can be dragged around the viewport. When the
+  // user presses down on a panel header, we record the offset and then
+  // update the panel's position as the pointer moves. The default
+  // centering transform is removed on drag start so that left/top take
+  // precedence.
+  (() => {
+    let dragPanel = null;
+    let offsetX = 0;
+    let offsetY = 0;
+    document.addEventListener('pointerdown', (e) => {
+      const header = e.target.closest('.panel-header');
+      if (!header) return;
+      const panel = header.closest('.pop');
+      if (!panel) return;
+      dragPanel = panel;
+      const rect = dragPanel.getBoundingClientRect();
+      // Set explicit left/top based on current position before removing transform
+      dragPanel.style.left = rect.left + 'px';
+      dragPanel.style.top = rect.top + 'px';
+      // Remove horizontal centering so the panel moves according to left/top
+      dragPanel.style.transform = 'none';
+      // Bring to front
+      dragPanel.style.zIndex = '999';
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      e.preventDefault();
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!dragPanel) return;
+      const x = e.clientX - offsetX;
+      const y = e.clientY - offsetY;
+      dragPanel.style.left = x + 'px';
+      dragPanel.style.top = y + 'px';
+    });
+    document.addEventListener('pointerup', () => {
+      dragPanel = null;
+    });
+    document.addEventListener('pointercancel', () => {
+      dragPanel = null;
+    });
+  })();
 
   // Smoke tests
   try {
